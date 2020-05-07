@@ -12,7 +12,7 @@
 
   <title>
     
-      m1kemu-sec &middot; My mostly security-focused thoughts, projects, and rants
+      Defeating Antivirus with Python &middot; m1kemu-sec
     
   </title>
 
@@ -96,18 +96,9 @@
       </div>
 
       <div class="container content">
-        <div class="posts">
-  
-  <div class="post">
-    <h1 class="post-title">
-      <a href="//python/evasion/shellcode/2020/05/07/python-av-evasion/">
-        Defeating Antivirus with Python
-      </a>
-    </h1>
-
-    <span class="post-date">07 May 2020</span>
-
-    <p>Antivirus (AV) has advanced a lot, even in the short years that I’ve spent attempting to evade it. Tricks that I’ve used 2 years ago to get a shell on a endpoint just don’t work anymore. Because of this, I’ve had to resort to trying different methods of shellcode execution on hosts. One thing I’ve noticed is that some common AV tools fail to detect shellcode injection from Pyinstalled binaries. I don’t have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.</p>
+        <div class="page">
+  <h1 class="page-title">Defeating Antivirus with Python</h1>
+  <p>Antivirus (AV) has advanced a lot, even in the short years that I’ve spent attempting to evade it. Tricks that I’ve used 2 years ago to get a shell on a endpoint just don’t work anymore. Because of this, I’ve had to resort to trying different methods of shellcode execution on hosts. One thing I’ve noticed is that some common AV tools fail to detect shellcode injection from Pyinstalled binaries. I don’t have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.</p>
 
 <p><strong>Theory 1:</strong> Machine Learning-based AV/EDR don’t have enough Pyinstalled binaries, especially malicious ones, to properly categorize these as malicious.</p>
 
@@ -710,19 +701,7 @@ if __name__ == '__main__':
 
 <p>Thanks for reading.</p>
 
-  </div>
-  
 </div>
-
-<div class="pagination">
-  
-    <span class="pagination-item older">Older</span>
-  
-  
-    <span class="pagination-item newer">Newer</span>
-  
-</div>
-
 
       </div>
     </div>

@@ -5,17 +5,18 @@ permalink:           pretty
 
 # Setup
 title:               m1kemu-sec
-tagline:             'A Security-focused blog about things'
-description:         'A Security-focused blog about things'
+tagline:             'My mostly security-focused thoughts, projects, and rants'
+description:         'My mostly security-focused thoughts, projects, and rants'
 url:                 https://m1kemu.github.io
-baseurl:             'https://m1kemu.github.io'
+baseurl:             ''
 paginate:            5
 
 # About/contact
 author:
   name:              Mike Music
   url:               https://twitter.com/m1kemu
-  email:             localhost@localhost.com
 
 # Custom vars
-version:             0.0.1
+version:             1.0.0
+
+plugins: [jekyll-paginate, jekyll-feed]

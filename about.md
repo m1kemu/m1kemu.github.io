@@ -4,17 +4,17 @@ title: About
 ---
 
 
-Welcome to my personal blog. This space is meant to be a centralized source of information that I want to share with the public that doesn't necessarily belong on social media platforms or code repositories. This could include tutorials, reviews, general insights, documentation, and probably rants. My primary goals with this page is two-fold: to provide what insights I can on topics that I find interesting in hopes on helping someone out, and to give me a space to document some of my technical work. Of course, it could always grow into something more or less.
+Welcome to my personal blog. This space is meant to be a centralized source of information that I want to share with the public that doesn't necessarily belong on social media platforms or code repositories. This could include tutorials, reviews, general insights, documentation, and probably rants. My primary goal with this project is two-fold: to provide what insights I can on topics that I find interesting in hopes on helping someone out, and to give me a space to document some of my technical work. Of course, it could always grow into something more or less.
 
 
 I'm a Security Engineer by profession and a Computer Science student at heart, so this will likely be the main topics of posts on this site. With that being said, there are plenty of topics outside of this space that I am always floating in and out of, and may end up deviating. With that, here are some of my main interests (as of January 2020) that I'll likely post about:
 
-* Red Teaming (or things I don't know)
+* Red Teaming
 * Penetration Testing
 * SIEM/Logging
 * Offensive tool development (my mediocre scripts)
 * Fitness
-* Outdoorsy stuff (from the perspective of someone with a severe vitamin D deficiency)
+* Outdoorsy stuff (from the perspective of someone with a vitamin D deficiency)
 * Travel (to the 3 cities I visit regularly)
 
 

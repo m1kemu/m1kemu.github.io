@@ -1,0 +1,2 @@
+I"<p>Antivirus (AV) tools have advanced in recent years. Tricks that I’ve used 2 years ago to get a shell on a endpoint just don’t work anymore. Because of this, I’ve had to resort to trying different methods of shellcode execution on hosts. One thing I’ve noticed is that some common AV/EDR tools fail to detect shellcode injection from Pyinstalled binaries. I don’t have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.</p>
+:ET
