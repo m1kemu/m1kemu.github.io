@@ -2,9 +2,9 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
 
  <title>m1kemu-sec</title>
- <link href="http://localhost:4000https://m1kemu.github.io/atom.xml" rel="self"/>
- <link href="http://localhost:4000https://m1kemu.github.io/"/>
- <updated>2020-05-07T20:25:00-04:00</updated>
+ <link href="http://localhost:4000/atom.xml" rel="self"/>
+ <link href="http://localhost:4000/"/>
+ <updated>2020-05-10T12:02:50-04:00</updated>
  <id>http://localhost:4000</id>
  <author>
    <name>Mike Music</name>
@@ -16,7 +16,7 @@
    <title>Defeating Antivirus with Python</title>
    <link href="http://localhost:4000/python/evasion/shellcode/2020/05/07/python-av-evasion/"/>
    <updated>2020-05-07T00:00:00-04:00</updated>
-   <id>http://localhost:4000https://m1kemu.github.io/python/evasion/shellcode/2020/05/07/python-av-evasion</id>
+   <id>http://localhost:4000/python/evasion/shellcode/2020/05/07/python-av-evasion</id>
    <content type="html">&lt;p&gt;Antivirus (AV) has advanced a lot, even in the short years that I’ve spent attempting to evade it. Tricks that I’ve used 2 years ago to get a shell on a endpoint just don’t work anymore. Because of this, I’ve had to resort to trying different methods of shellcode execution on hosts. One thing I’ve noticed is that some common AV tools fail to detect shellcode injection from Pyinstalled binaries. I don’t have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.&lt;/p&gt;
 
 &lt;p&gt;&lt;strong&gt;Theory 1:&lt;/strong&gt; Machine Learning-based AV/EDR don’t have enough Pyinstalled binaries, especially malicious ones, to properly categorize these as malicious.&lt;/p&gt;
