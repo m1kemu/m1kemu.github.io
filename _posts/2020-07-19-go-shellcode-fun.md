@@ -9,19 +9,23 @@ I've started to dabble in Go a lot over the last few months, and I'm starting to
 
 Before getting into the specifics of the Launcher techniques, here's a VirusTotal score for a couple of Launcher variants:
 
-1. Launcher with plaintext shellcode embedded.
+1. Launcher with plaintext shellcode embedded.  
+
 ![VirusTotal Results](/assets/images/go_shellcode_5.PNG)
 
 2. Launcher with XOR encrypted shellcode embedded (same score as unencrypted).
+
 ![VirusTotal Results](/assets/images/go_shellcode_5.PNG)
 
 3. Launcher that pulls down XOR encrypted shellcode via HTTPS.
+
 ![VirusTotal Results](/assets/images/go_shellcode_6.PNG)
 
 4. Launcher that pulls down shellcode via HTTPS and is packed with UPX.
+
 ![VirusTotal Results](/assets/images/go_shellcode_7.PNG)
 
-As you can see, the Launcher works pretty well, and it's very simple. Nice.
+As you can see, the Launcher works pretty well, and it's very simple. Nice.  
 
 ## Purpose
 
@@ -33,7 +37,7 @@ This post will cover some fun shellcode-related Launcher techniques for a shellc
 
 As with all of my blog posts, my primary motivation for doing this is to learn new techniques myself or to solidify my understanding of techniques I've used in the past. None of these techniques are groundbreaking or overly complex, and they're really just a combination of other well known techniques that are widely known. But the simplicity of this is what makes it great.
 
-**As with all of my code/documentation/articles, this is not to be used maliciously. Use this information for good, and follow all laws of your Nation/State/County/City/Home.**
+**As with all of my code/documentation/articles, this is not to be used maliciously. Use this information for good, and follow all laws of your Nation/State/County/City/Home.**  
 
 ## Getting Started
 
