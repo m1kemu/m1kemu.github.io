@@ -12,7 +12,7 @@
 
   <title>
     
-      m1kemu-sec &middot; My mostly security-focused thoughts, projects, and rants
+      Fun With Shellcode in Go &middot; m1kemu-sec
     
   </title>
 
@@ -100,18 +100,9 @@
       </div>
 
       <div class="container content">
-        <div class="posts">
-  
-  <div class="post">
-    <h1 class="post-title">
-      <a href="//security/2020/07/19/go-shellcode-fun/">
-        Fun With Shellcode in Go
-      </a>
-    </h1>
-
-    <span class="post-date">19 Jul 2020</span>
-
-    <p>I’ve started to dabble in Go a lot over the last few months, and I’m starting to see where it will fit in with Python and C# in my arsenal of commonly used programming languages for offensive tools. Thus far, I’ve developed a few shellcode Launchers that also include some simple AV/EDR evasion features. In my testing, these features have been pretty successful in evading most AV. If you’ve read my previous post on Python shellcode injection, this will be pretty similar. However, Go is generally more pleasant to work with when developing a Windows shellcode Launcher on Linux, so it won’t be as complex as the Python method I wrote about.</p>
+        <div class="page">
+  <h1 class="page-title">Fun With Shellcode in Go</h1>
+  <p>I’ve started to dabble in Go a lot over the last few months, and I’m starting to see where it will fit in with Python and C# in my arsenal of commonly used programming languages for offensive tools. Thus far, I’ve developed a few shellcode Launchers that also include some simple AV/EDR evasion features. In my testing, these features have been pretty successful in evading most AV. If you’ve read my previous post on Python shellcode injection, this will be pretty similar. However, Go is generally more pleasant to work with when developing a Windows shellcode Launcher on Linux, so it won’t be as complex as the Python method I wrote about.</p>
 
 <p>Before getting into the specifics of the Launcher techniques, here’s a VirusTotal score for a couple of Launcher variants:</p>
 
@@ -816,19 +807,7 @@ upx <span class="nt">--brute</span> launcher32.exe
 
 <p>Thanks for reading. Check out my <a href="https://github.com/m1kemu/MiscellaneousCode">Github</a> page for code snippets from this post.</p>
 
-  </div>
-  
 </div>
-
-<div class="pagination">
-  
-    <a class="pagination-item older" href="/page2">Older</a>
-  
-  
-    <span class="pagination-item newer">Newer</span>
-  
-</div>
-
 
       </div>
     </div>

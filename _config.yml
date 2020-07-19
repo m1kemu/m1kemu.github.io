@@ -9,7 +9,7 @@ tagline:             'My mostly security-focused thoughts, projects, and rants'
 description:         'My mostly security-focused thoughts, projects, and rants'
 url:                 https://m1kemu.github.io
 baseurl:             'https://m1kemu.github.io'
-paginate:            5
+paginate:            1
 
 # About/contact
 author:

