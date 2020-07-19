@@ -107,28 +107,15 @@
 <p>Before getting into the specifics of the Launcher techniques, here’s a VirusTotal score for a couple of Launcher variants:</p>
 
 <ol>
-  <li>Launcher with plaintext shellcode embedded.</li>
+  <li>Launcher with plaintext shellcode embedded.<br />
+<img src="/assets/images/go_shellcode_5.PNG" alt="VirusTotal Results" /></li>
+  <li>Launcher with XOR encrypted shellcode embedded (same score as unencrypted).<br />
+<img src="/assets/images/go_shellcode_5.PNG" alt="VirusTotal Results" /></li>
+  <li>Launcher that pulls down XOR encrypted shellcode via HTTPS.<br />
+<img src="/assets/images/go_shellcode_6.PNG" alt="VirusTotal Results" /></li>
+  <li>Launcher that pulls down shellcode via HTTPS and is packed with UPX.<br />
+<img src="/assets/images/go_shellcode_7.PNG" alt="VirusTotal Results" /></li>
 </ol>
-
-<p><img src="/assets/images/go_shellcode_5.PNG" alt="VirusTotal Results" /></p>
-
-<ol>
-  <li>Launcher with XOR encrypted shellcode embedded (same score as unencrypted).</li>
-</ol>
-
-<p><img src="/assets/images/go_shellcode_5.PNG" alt="VirusTotal Results" /></p>
-
-<ol>
-  <li>Launcher that pulls down XOR encrypted shellcode via HTTPS.</li>
-</ol>
-
-<p><img src="/assets/images/go_shellcode_6.PNG" alt="VirusTotal Results" /></p>
-
-<ol>
-  <li>Launcher that pulls down shellcode via HTTPS and is packed with UPX.</li>
-</ol>
-
-<p><img src="/assets/images/go_shellcode_7.PNG" alt="VirusTotal Results" /></p>
 
 <p>As you can see, the Launcher works pretty well, and it’s very simple. Nice.</p>
 
