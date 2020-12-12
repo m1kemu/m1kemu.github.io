@@ -1,0 +1,29 @@
+---
+layout: page
+title: Posts Archive
+---
+
+<div class="posts">
+	<h3 id='security'>Security</h3>
+	{% assign pages_list = site.categories['security'] | sort:'date' | reversed %}
+	{% for post in pages_list %}
+			<strong>{{ post.date | date_to_string }}: </strong>
+			<a href="{{ site.baseurl }}/{{ post.url }}">
+				{{ post.title }}
+			</a>
+			<br>
+	{% endfor %}
+
+	<h3 id='hobbies'>Hobbies</h3>
+	{% assign pages_list = site.categories['hobbies']%}
+	{% if pages_list != null %}
+		{% assign pages_list = pages_list | sort:'date' | reversed %}
+	{% endif %}
+	{% for post in pages_list %}
+			<strong>{{ post.date | date_to_string }}: </strong>
+			<a href="{{ site.baseurl }}/{{ post.url }}">
+				{{ post.title }}
+			</a>
+			<br>
+	{% endfor %}
+</div>

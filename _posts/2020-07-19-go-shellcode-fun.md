@@ -3,6 +3,7 @@ layout: page
 title: "Fun With Shellcode in Go"
 categories: security
 published: true
+date: 2020-07-19
 ---
 
 I've started to dabble in Go a lot over the last few months, and I'm starting to see where it will fit in with Python and C# in my arsenal of commonly used programming languages for offensive tools. Thus far, I've developed a few shellcode Launchers that also include some simple AV/EDR evasion features. In my testing, these features have been pretty successful in evading most AV. If you've read my previous post on Python shellcode injection, this will be pretty similar. However, Go is generally more pleasant to work with when developing a Windows shellcode Launcher on Linux, so it won't be as complex as the Python method I wrote about.

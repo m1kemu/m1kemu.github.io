@@ -12,7 +12,7 @@
 
   <title>
     
-      Defeating AV/EDR with Python &middot; m1kemu-sec
+      m1kemu-sec &middot; My mostly security-focused thoughts, projects, and rants
     
   </title>
 
@@ -114,9 +114,18 @@
       </div>
 
       <div class="container content">
-        <div class="page">
-  <h1 class="page-title">Defeating AV/EDR with Python</h1>
-  <p>Antivirus (AV) and Endpoint Detection and Response (EDR) tools have gotten a lot more advanced in recent years. Tricks that I’ve used 2 years ago to get a shell on a typical endpoint just don’t work anymore. Because of this, I’ve had to resort to trying different methods of shellcode execution on hosts. One thing that I’ve noticed is that some common AV/EDR tools fail to detect shellcode injection from Pyinstalled binaries. I don’t have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.</p>
+        <div class="posts">
+  
+  <div class="post">
+    <h1 class="post-title">
+      <a href="//security/2020/05/07/python-av-evasion/">
+        Defeating AV/EDR with Python
+      </a>
+    </h1>
+
+    <span class="post-date">07 May 2020</span>
+
+    <p>Antivirus (AV) and Endpoint Detection and Response (EDR) tools have gotten a lot more advanced in recent years. Tricks that I’ve used 2 years ago to get a shell on a typical endpoint just don’t work anymore. Because of this, I’ve had to resort to trying different methods of shellcode execution on hosts. One thing that I’ve noticed is that some common AV/EDR tools fail to detect shellcode injection from Pyinstalled binaries. I don’t have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.</p>
 
 <p><strong>Theory 1:</strong> Machine Learning-based AV/EDR don’t have enough Pyinstalled binaries, especially malicious ones, to properly categorize these as malicious.</p>
 
@@ -719,6 +728,19 @@ if __name__ == '__main__':
 
 <p>Thanks for reading.</p>
 
+  </div>
+  
+</div>
+
+<div class="pagination">
+  
+    <span class="pagination-item older">Older</span>
+  
+  
+    
+      <a class="pagination-item newer" href="/page2">Newer</a>
+    
+  
 </div>
 
       </div>

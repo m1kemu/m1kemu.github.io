@@ -12,10 +12,10 @@ I'm a Security Engineer by profession and a Computer Science student at heart, s
 * Red Teaming
 * Penetration Testing
 * SIEM/Logging
-* Offensive tool development (my mediocre scripts)
+* Offensive tool development
 * Fitness
-* Outdoorsy stuff (from the perspective of someone with a vitamin D deficiency)
-* Travel (to the 3 cities I visit regularly)
+* Outdoorsy stuff
+* Travel 
 
 
 ## Ethics
@@ -32,7 +32,7 @@ Aside from publishing high quality content on here, I aim to keep this page ethi
 I'll keep this short since most of my professional credentials are available on LinkedIn (for better or for worse). I hold a BS in Computer Science, several security-related certifications (OSCP, OSCE, Sec+), and hope to pursue an MS in the near future. I've done software development, defensive security engineering, and most recently offensive security engineering work. I'm pretty diligent about performing research in my spare time, which mostly pertain to the topics covered in this blog. Hopefully you can get an understanding of what I enjoy outside of "tech stuff" from this blog as well, but that's mostly personal.
 
 
-I primarily use [Twitter](https://twitter.com/m1kemu), [LinkedIn](https://www.linkedin.com/in/michael-music-2582a5b5), and [GitHub](https://github.com/m1kemu) for social media. 
+I primarily use [Twitter](https://twitter.com/m1kemu), [LinkedIn](https://www.linkedin.com/in/michael-music-2582a5b5), and [GitHub](https://github.com/m1kemu) for social media.
 
 
 I don't currently plan to add a contact email address for this site, but that may happen in the future.

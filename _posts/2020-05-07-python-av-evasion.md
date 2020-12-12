@@ -3,6 +3,7 @@ layout: page
 title: "Defeating AV/EDR with Python"
 categories: security
 published: true
+date: 2020-05-07
 ---
 
 Antivirus (AV) and Endpoint Detection and Response (EDR) tools have gotten a lot more advanced in recent years. Tricks that I've used 2 years ago to get a shell on a typical endpoint just don't work anymore. Because of this, I've had to resort to trying different methods of shellcode execution on hosts. One thing that I've noticed is that some common AV/EDR tools fail to detect shellcode injection from Pyinstalled binaries. I don't have a solid explanation for this, but I do have some theories based on the scarce information available on detection logic for specific AV/EDR.
@@ -633,4 +634,3 @@ These techniques can be used to bypass various AV/EDR tools when running shellco
 For the Offensive folks, I hope I've given you some good ideas on getting shellcode around around AV/EDR tools using Python. For such an old trick, it really stands up well. For the Defensive folks, I recommend taking a deeper look at these types of binaries. I can't foresee many situations where they would be very useful, but there are a few. If new ways of executing Python scripts on Windows (Ironpython?), I can can imagine the use of python for shellcode execution will become more popular.
 
 Thanks for reading.
-
