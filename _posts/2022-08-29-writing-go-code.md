@@ -108,7 +108,7 @@ See for yourself! [Run a few searches in the Go package search page](https://pkg
 ## When I Avoid Go 
 If it isn't obvious, my workflow involves using Python and Go almost exclusively for tool development. I find myself mentally meandering through a decision tree of sorts when I choose which language to choose for a project or component of a project. It looks something like this.
 
-![my_thought_process]("/assets/images/writing_go_code_1.png")
+![Python or Golang](/assets/images/writing_go_code_1.png)
 
 
 ## Conclusion
