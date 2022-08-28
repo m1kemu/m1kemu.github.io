@@ -6,7 +6,6 @@ published: true
 date: 2022-08-28
 ---
 
-# On Writing Offsec Tools in Go 
 As of late, a large portion of my day-to-day work as a Red Teamer has been devoted to developing custom tools. A lot of factors contribute to me developing offensive security tools myself rather than using pre-built tools (open source or commercial), but it mainly boils down to the following reasons:
 - **Evasion**: Pre-built tools are well signatured by security controls. Writing custom tools has always proven to be a reliable means of evading defenses, even if the custom tools closely resemple widely used alternatives.
 - **Budget**: The members of the Red Team are the greatest asset for the team, and having the ability to develop tools rather than purchase them or spend cycles configuring badly written alternatives helps limit spending budget on commerical tools and developers.
