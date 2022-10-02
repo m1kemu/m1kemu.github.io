@@ -3,7 +3,7 @@ layout: page
 title: "On Writing Offsec Tools in Go"
 categories: security
 published: true
-date: 2022-08-28
+date: 2022-10-02
 ---
 
 As of late, a large portion of my day-to-day work as a Red Teamer has been devoted to developing custom tools. A lot of factors contribute to me developing offensive security tools myself rather than using pre-built tools (open source or commercial), but it mainly boils down to the following reasons:
@@ -120,10 +120,10 @@ With that, **thanks for reading!**
 
 
 ### GoPayloadDropper
-This is a weaponized version of a payload launcher that I have used on several campaigns with success. GoPayloadDropper implements payload encryption, decryption, encoding, download, and execution methods into a tool for generating payload droppers for EDR/AV evasion. [More details are available on GitHub]().
+This is a weaponized version of a payload launcher that I have used on several campaigns with success. GoPayloadDropper implements payload encryption, decryption, encoding, download, and execution methods into a tool for generating payload droppers for EDR/AV evasion. [More details are available on GitHub](https://github.com/m1kemu/GoPayloadDropper).
 
 
 ### GoEgressChecker
-GoEgressChecker is a concurrent, simple egress testing utility to assess ways of exfilrating data from a network, conducting C2, etc. There are several other projects that do the same type of assessing, but none that fit the exact use and as I was aiming for that were written in Golang. [Check it out!]()
+GoEgressChecker is a concurrent, simple egress testing utility to assess ways of exfilrating data from a network, conducting C2, etc. There are several other projects that do the same type of assessing, but none that fit the exact use and as I was aiming for that were written in Golang. [Check it out!](https://github.com/m1kemu/GoEgressCheck)
 
 
